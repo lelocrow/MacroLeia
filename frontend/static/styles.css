@@ -88,6 +88,17 @@ button:disabled {
   margin: 4px 0 18px;
 }
 
+.powered-by {
+  position: fixed;
+  right: 12px;
+  bottom: 10px;
+  z-index: 30;
+  width: min(92px, 26vw);
+  max-height: 42px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 h1,
 h2,
 p {
@@ -224,6 +235,7 @@ textarea:focus {
 }
 
 .macro-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -241,6 +253,21 @@ textarea:focus {
   color: var(--text);
   text-align: left;
   font-weight: 750;
+}
+
+.copy-tooltip {
+  position: absolute;
+  left: 14px;
+  top: -11px;
+  z-index: 4;
+  border: 1px solid rgba(132, 216, 143, 0.55);
+  border-radius: 8px;
+  background: #102016;
+  color: var(--green);
+  box-shadow: var(--shadow);
+  padding: 5px 9px;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .row-actions {

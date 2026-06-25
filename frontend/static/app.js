@@ -6,6 +6,7 @@ const state = {
   mode: "loading",
   authMode: "login",
   toast: "",
+  copyTipId: null,
 };
 
 const app = document.querySelector("#app");
@@ -69,6 +70,7 @@ function render() {
   app.innerHTML = `
     ${views[state.mode]()}
     ${state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : ""}
+    ${renderPoweredBy()}
   `;
 }
 
@@ -107,6 +109,10 @@ function renderLogo() {
   return `<img class="site-logo" src="/assets/logo.png" alt="MacroLeia" />`;
 }
 
+function renderPoweredBy() {
+  return `<img class="powered-by" src="/assets/poweredby.png" alt="Powered by" />`;
+}
+
 function renderHeader(title, actions = "") {
   return `
     <div class="logo-strip">${renderLogo()}</div>
@@ -126,6 +132,7 @@ function renderList() {
       (macro, index) => `
         <article class="macro-row">
           <button class="macro-name" data-action="open" data-id="${macro.id}">${escapeHtml(macro.name)}</button>
+          ${state.copyTipId === String(macro.id) ? `<span class="copy-tooltip">Copiado</span>` : ""}
           <div class="row-actions">
             <button class="arrow" title="Subir" data-action="move" data-id="${macro.id}" data-direction="up" ${index === 0 ? "disabled" : ""}>↑</button>
             <button class="arrow" title="Descer" data-action="move" data-id="${macro.id}" data-direction="down" ${index === state.macros.length - 1 ? "disabled" : ""}>↓</button>
@@ -288,7 +295,7 @@ app.addEventListener("click", async (event) => {
   const target = event.target.closest("[data-action]");
   if (!target) return;
   const action = target.dataset.action;
-  const id = Number(target.dataset.id);
+  const id = target.dataset.id;
 
   try {
     if (action === "toggle-auth") {
@@ -321,6 +328,14 @@ app.addEventListener("click", async (event) => {
     }
 
     if (action === "open") {
+      const listedMacro = state.macros.find((item) => String(item.id) === String(id));
+      const singleButton = getSingleFilledButton(listedMacro);
+      if (singleButton) {
+        await copyText(singleButton.message);
+        showCopyTooltip(id);
+        return;
+      }
+
       const { macro } = await api(`/api/macros/${id}`);
       state.selectedMacro = macro;
       state.selectedButton = macro.buttons[0] || null;
@@ -328,7 +343,7 @@ app.addEventListener("click", async (event) => {
     }
 
     if (action === "edit") {
-      const macro = state.macros.find((item) => item.id === id) || state.selectedMacro;
+      const macro = state.macros.find((item) => String(item.id) === String(id)) || state.selectedMacro;
       state.selectedMacro = macro;
       state.mode = "form";
     }
@@ -346,8 +361,8 @@ app.addEventListener("click", async (event) => {
       state.selectedButton = state.selectedMacro.buttons.find((button) => button.number === number);
       const message = state.selectedButton?.message || "";
       if (message) {
-        await navigator.clipboard.writeText(message);
-        setToast("Texto copiado");
+        await copyText(message);
+        setToast("Copiado");
       }
     }
 
@@ -404,6 +419,25 @@ function syncEditorState() {
     label: String(index + 1),
     message: message.value,
   }));
+}
+
+function getSingleFilledButton(macro) {
+  const filledButtons = (macro?.buttons || []).filter((button) => button.message?.trim());
+  return filledButtons.length === 1 ? filledButtons[0] : null;
+}
+
+async function copyText(message) {
+  await navigator.clipboard.writeText(message);
+}
+
+function showCopyTooltip(id) {
+  state.copyTipId = String(id);
+  render();
+  window.clearTimeout(showCopyTooltip.timer);
+  showCopyTooltip.timer = window.setTimeout(() => {
+    state.copyTipId = null;
+    render();
+  }, 1400);
 }
 
 loadSession();

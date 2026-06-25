@@ -7,6 +7,11 @@ const state = {
   authMode: "login",
   toast: "",
   copyTipId: null,
+  authFields: {
+    username: "",
+    email: "",
+    password: "",
+  },
 };
 
 const app = document.querySelector("#app");
@@ -96,15 +101,14 @@ function renderAuth() {
       <div class="brand">
         ${renderLogo()}
         <div>
-          <h1>MacroLeia</h1>
           <p>Suas macros protegidas e prontas para colar.</p>
         </div>
       </div>
       <form class="panel" data-action="${isReset ? "reset-password" : isLogin ? "login" : "register"}">
         <h2>${isReset ? "Redefinir senha" : isLogin ? "Entrar" : "Criar usuario"}</h2>
-        <label>Usuario<input name="username" autocomplete="username" required minlength="3" /></label>
-        ${isLogin ? "" : `<label>Email<input name="email" type="email" autocomplete="email" required /></label>`}
-        <label>${isReset ? "Nova senha" : "Senha"}<input name="password" type="password" autocomplete="${isLogin ? "current-password" : "new-password"}" required minlength="6" /></label>
+        <label>Usuario<input name="username" autocomplete="username" required minlength="3" value="${escapeAttr(state.authFields.username)}" /></label>
+        ${isLogin ? "" : `<label>Email<input name="email" type="email" autocomplete="email" required value="${escapeAttr(state.authFields.email)}" /></label>`}
+        <label>${isReset ? "Nova senha" : "Senha"}<input name="password" type="password" autocomplete="${isLogin ? "current-password" : "new-password"}" required minlength="6" value="${escapeAttr(state.authFields.password)}" /></label>
         <button class="primary" type="submit">${isReset ? "Salvar nova senha" : isLogin ? "Entrar" : "Criar e entrar"}</button>
         <button class="ghost" type="button" data-action="${isReset ? "show-login" : "toggle-auth"}">
           ${isLogin ? "Criar novo usuario" : "Ja tenho usuario"}
@@ -239,6 +243,7 @@ app.addEventListener("submit", async (event) => {
         }),
       });
       state.user = user;
+      resetAuthFields();
       await loadMacros();
       state.mode = "list";
     }
@@ -253,6 +258,7 @@ app.addEventListener("submit", async (event) => {
         }),
       });
       state.user = user;
+      resetAuthFields();
       await loadMacros();
       state.mode = "list";
     }
@@ -268,6 +274,7 @@ app.addEventListener("submit", async (event) => {
       });
       state.authMode = "login";
       state.mode = "auth";
+      resetAuthFields();
       setToast("Senha redefinida");
     }
 
@@ -295,6 +302,18 @@ app.addEventListener("submit", async (event) => {
   } catch (error) {
     setToast(error.message);
   }
+});
+
+app.addEventListener("input", (event) => {
+  const field = event.target;
+  if (
+    state.mode !== "auth" ||
+    !field.name ||
+    !Object.prototype.hasOwnProperty.call(state.authFields, field.name)
+  ) {
+    return;
+  }
+  state.authFields[field.name] = field.value;
 });
 
 app.addEventListener("click", async (event) => {
@@ -446,6 +465,14 @@ function restoreFocusedField(focusedField) {
   if (typeof field.setSelectionRange === "function") {
     field.setSelectionRange(focusedField.selectionStart, focusedField.selectionEnd);
   }
+}
+
+function resetAuthFields() {
+  state.authFields = {
+    username: "",
+    email: "",
+    password: "",
+  };
 }
 
 function syncEditorState() {

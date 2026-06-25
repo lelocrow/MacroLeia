@@ -1,0 +1,409 @@
+const state = {
+  user: null,
+  macros: [],
+  selectedMacro: null,
+  selectedButton: null,
+  mode: "loading",
+  authMode: "login",
+  toast: "",
+};
+
+const app = document.querySelector("#app");
+const defaultButtons = () =>
+  Array.from({ length: 6 }, (_, index) => ({
+    number: index + 1,
+    label: String(index + 1),
+    message: "",
+  }));
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    credentials: "include",
+    ...options,
+  });
+
+  if (response.status === 204) return null;
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.detail || "Algo saiu do esperado");
+  return payload;
+}
+
+function setToast(message) {
+  state.toast = message;
+  render();
+  if (message) {
+    window.clearTimeout(setToast.timer);
+    setToast.timer = window.setTimeout(() => {
+      state.toast = "";
+      render();
+    }, 2200);
+  }
+}
+
+async function loadSession() {
+  try {
+    const { user } = await api("/api/me");
+    state.user = user;
+    await loadMacros();
+    state.mode = "list";
+  } catch {
+    state.mode = "auth";
+  }
+  render();
+}
+
+async function loadMacros() {
+  const { macros } = await api("/api/macros");
+  state.macros = macros;
+}
+
+function render() {
+  const views = {
+    loading: renderLoading,
+    auth: renderAuth,
+    list: renderList,
+    detail: renderDetail,
+    form: renderForm,
+  };
+  app.innerHTML = `
+    ${views[state.mode]()}
+    ${state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : ""}
+  `;
+}
+
+function renderLoading() {
+  return `<section class="center-panel">${renderLogo()}<h1>MacroLeia</h1><p>Carregando...</p></section>`;
+}
+
+function renderAuth() {
+  const isLogin = state.authMode === "login";
+  const isReset = state.authMode === "reset";
+  return `
+    <section class="auth-panel">
+      <div class="brand">
+        ${renderLogo()}
+        <div>
+          <h1>MacroLeia</h1>
+          <p>Suas macros protegidas e prontas para colar.</p>
+        </div>
+      </div>
+      <form class="panel" data-action="${isReset ? "reset-password" : isLogin ? "login" : "register"}">
+        <h2>${isReset ? "Redefinir senha" : isLogin ? "Entrar" : "Criar usuario"}</h2>
+        <label>Usuario<input name="username" autocomplete="username" required minlength="3" /></label>
+        ${isLogin ? "" : `<label>Email<input name="email" type="email" autocomplete="email" required /></label>`}
+        <label>${isReset ? "Nova senha" : "Senha"}<input name="password" type="password" autocomplete="${isLogin ? "current-password" : "new-password"}" required minlength="6" /></label>
+        <button class="primary" type="submit">${isReset ? "Salvar nova senha" : isLogin ? "Entrar" : "Criar e entrar"}</button>
+        <button class="ghost" type="button" data-action="${isReset ? "show-login" : "toggle-auth"}">
+          ${isLogin ? "Criar novo usuario" : "Ja tenho usuario"}
+        </button>
+        ${isLogin ? `<button class="link-button" type="button" data-action="show-reset">Esqueci minha senha</button>` : ""}
+      </form>
+    </section>
+  `;
+}
+
+function renderLogo() {
+  return `<img class="site-logo" src="/assets/logo.png" alt="MacroLeia" />`;
+}
+
+function renderHeader(title, actions = "") {
+  return `
+    <div class="logo-strip">${renderLogo()}</div>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">${escapeHtml(state.user?.username || "")}</p>
+        <h1>${escapeHtml(title)}</h1>
+      </div>
+      <div class="top-actions">${actions}<button class="icon-button" data-action="logout" title="Sair">Sair</button></div>
+    </header>
+  `;
+}
+
+function renderList() {
+  const items = state.macros
+    .map(
+      (macro, index) => `
+        <article class="macro-row">
+          <button class="macro-name" data-action="open" data-id="${macro.id}">${escapeHtml(macro.name)}</button>
+          <div class="row-actions">
+            <button class="arrow" title="Subir" data-action="move" data-id="${macro.id}" data-direction="up" ${index === 0 ? "disabled" : ""}>↑</button>
+            <button class="arrow" title="Descer" data-action="move" data-id="${macro.id}" data-direction="down" ${index === state.macros.length - 1 ? "disabled" : ""}>↓</button>
+            <button class="small" data-action="edit" data-id="${macro.id}">Editar</button>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+
+  return `
+    ${renderHeader("Macros", `<button class="primary compact" data-action="new">Nova</button>`)}
+    <section class="list-wrap">
+      ${items || `<div class="empty">Nenhuma macro ainda.</div>`}
+    </section>
+  `;
+}
+
+function renderDetail() {
+  const macro = state.selectedMacro;
+  const buttons = macro.buttons.length ? macro.buttons : defaultButtons();
+  const selected = state.selectedButton || buttons[0];
+  return `
+    ${renderHeader(macro.name, `<button class="ghost compact" data-action="back">Voltar</button><button class="primary compact" data-action="edit" data-id="${macro.id}">Editar</button>`)}
+    <section class="detail">
+      <div class="number-grid">
+        ${buttons
+          .map(
+            (button) => `
+              <button class="number-button ${selected?.number === button.number ? "active" : ""}" data-action="copy" data-number="${button.number}">
+                ${button.number}
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+      <div class="message-view">${escapeHtml(selected?.message || "Sem texto gravado neste botao.")}</div>
+    </section>
+  `;
+}
+
+function renderForm() {
+  const macro = state.selectedMacro || { name: "", buttons: defaultButtons() };
+  const buttons = normalizeButtons(macro.buttons);
+  return `
+    ${renderHeader(macro.id ? "Editar macro" : "Nova macro", `<button class="ghost compact" data-action="back">Voltar</button>`)}
+    <form class="editor" data-action="save-macro" data-id="${macro.id || ""}">
+      <label>Nome da macro<input name="name" required maxlength="80" value="${escapeAttr(macro.name)}" /></label>
+      <div class="button-editor-head">
+        <h2>Textos dos botoes</h2>
+        <button class="ghost compact" type="button" data-action="add-button">Adicionar botao</button>
+      </div>
+      <div class="button-editor">
+        ${buttons.map(renderButtonEditor).join("")}
+      </div>
+      <div class="form-actions">
+        ${macro.id ? `<button class="danger" type="button" data-action="delete" data-id="${macro.id}">Excluir</button>` : ""}
+        <button class="primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderButtonEditor(button, index) {
+  return `
+    <section class="button-card">
+      <div class="button-card-title">
+        <strong>${index + 1}</strong>
+        <button class="icon-button" type="button" data-action="remove-button" data-index="${index}" ${index < 1 ? "disabled" : ""}>Remover</button>
+      </div>
+      <label>Mensagem<textarea name="button-message" rows="4" maxlength="5000">${escapeHtml(button.message || "")}</textarea></label>
+    </section>
+  `;
+}
+
+function normalizeButtons(buttons) {
+  const normalized = buttons?.length ? buttons : defaultButtons();
+  return normalized.map((button, index) => ({
+    number: index + 1,
+    label: button.label || String(index + 1),
+    message: button.message || "",
+  }));
+}
+
+app.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const action = form.dataset.action;
+  const formData = new FormData(form);
+
+  try {
+    if (action === "login") {
+      const { user } = await api("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          username: formData.get("username"),
+          password: formData.get("password"),
+        }),
+      });
+      state.user = user;
+      await loadMacros();
+      state.mode = "list";
+    }
+
+    if (action === "register") {
+      const { user } = await api("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          username: formData.get("username"),
+          email: formData.get("email"),
+          password: formData.get("password"),
+        }),
+      });
+      state.user = user;
+      await loadMacros();
+      state.mode = "list";
+    }
+
+    if (action === "reset-password") {
+      await api("/api/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({
+          username: formData.get("username"),
+          email: formData.get("email"),
+          new_password: formData.get("password"),
+        }),
+      });
+      state.authMode = "login";
+      state.mode = "auth";
+      setToast("Senha redefinida");
+    }
+
+    if (action === "save-macro") {
+      const messages = [...form.querySelectorAll('[name="button-message"]')];
+      const payload = {
+        name: formData.get("name"),
+        buttons: messages.map((message, index) => ({
+          label: String(index + 1),
+          message: message.value,
+        })),
+      };
+      const macroId = form.dataset.id;
+      const result = await api(macroId ? `/api/macros/${macroId}` : "/api/macros", {
+        method: macroId ? "PUT" : "POST",
+        body: JSON.stringify(payload),
+      });
+      await loadMacros();
+      state.selectedMacro = result.macro;
+      state.selectedButton = result.macro.buttons[0] || null;
+      state.mode = "detail";
+      setToast("Macro salva");
+    }
+    render();
+  } catch (error) {
+    setToast(error.message);
+  }
+});
+
+app.addEventListener("click", async (event) => {
+  const target = event.target.closest("[data-action]");
+  if (!target) return;
+  const action = target.dataset.action;
+  const id = Number(target.dataset.id);
+
+  try {
+    if (action === "toggle-auth") {
+      state.authMode = state.authMode === "login" ? "register" : "login";
+    }
+
+    if (action === "show-reset") {
+      state.authMode = "reset";
+    }
+
+    if (action === "show-login") {
+      state.authMode = "login";
+    }
+
+    if (action === "logout") {
+      await api("/api/auth/logout", { method: "POST" });
+      state.user = null;
+      state.macros = [];
+      state.mode = "auth";
+    }
+
+    if (action === "new") {
+      state.selectedMacro = { name: "", buttons: defaultButtons() };
+      state.mode = "form";
+    }
+
+    if (action === "back") {
+      state.mode = state.selectedMacro?.id ? "detail" : "list";
+      if (state.mode === "detail") state.selectedButton = state.selectedMacro.buttons[0] || null;
+    }
+
+    if (action === "open") {
+      const { macro } = await api(`/api/macros/${id}`);
+      state.selectedMacro = macro;
+      state.selectedButton = macro.buttons[0] || null;
+      state.mode = "detail";
+    }
+
+    if (action === "edit") {
+      const macro = state.macros.find((item) => item.id === id) || state.selectedMacro;
+      state.selectedMacro = macro;
+      state.mode = "form";
+    }
+
+    if (action === "move") {
+      const { macros } = await api(`/api/macros/${id}/reorder`, {
+        method: "POST",
+        body: JSON.stringify({ direction: target.dataset.direction }),
+      });
+      state.macros = macros;
+    }
+
+    if (action === "copy") {
+      const number = Number(target.dataset.number);
+      state.selectedButton = state.selectedMacro.buttons.find((button) => button.number === number);
+      const message = state.selectedButton?.message || "";
+      if (message) {
+        await navigator.clipboard.writeText(message);
+        setToast("Texto copiado");
+      }
+    }
+
+    if (action === "add-button") {
+      syncEditorState();
+      const cards = state.selectedMacro.buttons.length;
+      state.selectedMacro.buttons.push({ number: cards + 1, label: String(cards + 1), message: "" });
+    }
+
+    if (action === "remove-button") {
+      syncEditorState();
+      const index = Number(target.dataset.index);
+      state.selectedMacro.buttons = normalizeButtons(state.selectedMacro.buttons).filter((_, itemIndex) => itemIndex !== index);
+    }
+
+    if (action === "delete") {
+      if (window.confirm("Excluir esta macro?")) {
+        await api(`/api/macros/${id}`, { method: "DELETE" });
+        await loadMacros();
+        state.selectedMacro = null;
+        state.selectedButton = null;
+        state.mode = "list";
+        setToast("Macro excluida");
+      }
+    }
+
+    render();
+  } catch (error) {
+    setToast(error.message);
+  }
+});
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+function syncEditorState() {
+  const editor = app.querySelector(".editor");
+  if (!editor || !state.selectedMacro) return;
+  const formData = new FormData(editor);
+  const messages = [...editor.querySelectorAll('[name="button-message"]')];
+  state.selectedMacro.name = formData.get("name") || state.selectedMacro.name;
+  state.selectedMacro.buttons = messages.map((message, index) => ({
+    number: index + 1,
+    label: String(index + 1),
+    message: message.value,
+  }));
+}
+
+loadSession();

@@ -10,6 +10,17 @@ const state = {
 };
 
 const app = document.querySelector("#app");
+const toast = document.createElement("div");
+toast.className = "toast";
+toast.hidden = true;
+document.body.appendChild(toast);
+
+const poweredBy = document.createElement("img");
+poweredBy.className = "powered-by";
+poweredBy.src = "/assets/poweredby.png";
+poweredBy.alt = "Powered by";
+document.body.appendChild(poweredBy);
+
 const defaultButtons = () =>
   Array.from({ length: 6 }, (_, index) => ({
     number: index + 1,
@@ -32,12 +43,12 @@ async function api(path, options = {}) {
 
 function setToast(message) {
   state.toast = message;
-  render();
+  renderToast();
   if (message) {
     window.clearTimeout(setToast.timer);
     setToast.timer = window.setTimeout(() => {
       state.toast = "";
-      render();
+      renderToast();
     }, 2200);
   }
 }
@@ -60,6 +71,7 @@ async function loadMacros() {
 }
 
 function render() {
+  const focusedField = captureFocusedField();
   const views = {
     loading: renderLoading,
     auth: renderAuth,
@@ -67,11 +79,9 @@ function render() {
     detail: renderDetail,
     form: renderForm,
   };
-  app.innerHTML = `
-    ${views[state.mode]()}
-    ${state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : ""}
-    ${renderPoweredBy()}
-  `;
+  app.innerHTML = views[state.mode]();
+  renderToast();
+  restoreFocusedField(focusedField);
 }
 
 function renderLoading() {
@@ -107,10 +117,6 @@ function renderAuth() {
 
 function renderLogo() {
   return `<img class="site-logo" src="/assets/logo.png" alt="MacroLeia" />`;
-}
-
-function renderPoweredBy() {
-  return `<img class="powered-by" src="/assets/poweredby.png" alt="Powered by" />`;
 }
 
 function renderHeader(title, actions = "") {
@@ -406,6 +412,40 @@ function escapeHtml(value) {
 
 function escapeAttr(value) {
   return escapeHtml(value);
+}
+
+function renderToast() {
+  toast.hidden = !state.toast;
+  toast.textContent = state.toast;
+}
+
+function captureFocusedField() {
+  const field = document.activeElement;
+  if (!field || !app.contains(field) || !["INPUT", "TEXTAREA"].includes(field.tagName)) return null;
+
+  const fields = [...app.querySelectorAll(field.tagName.toLowerCase())].filter((item) => item.name === field.name);
+  return {
+    tag: field.tagName.toLowerCase(),
+    name: field.name,
+    index: fields.indexOf(field),
+    value: field.value,
+    selectionStart: field.selectionStart,
+    selectionEnd: field.selectionEnd,
+  };
+}
+
+function restoreFocusedField(focusedField) {
+  if (!focusedField) return;
+
+  const candidates = [...app.querySelectorAll(focusedField.tag)].filter((item) => item.name === focusedField.name);
+  const field = candidates[focusedField.index];
+  if (!field) return;
+
+  field.value = focusedField.value;
+  field.focus({ preventScroll: true });
+  if (typeof field.setSelectionRange === "function") {
+    field.setSelectionRange(focusedField.selectionStart, focusedField.selectionEnd);
+  }
 }
 
 function syncEditorState() {

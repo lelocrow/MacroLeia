@@ -293,9 +293,15 @@ app.addEventListener("submit", async (event) => {
         body: JSON.stringify(payload),
       });
       await loadMacros();
-      state.selectedMacro = result.macro;
-      state.selectedButton = result.macro.buttons[0] || null;
-      state.mode = "detail";
+      if (macroId) {
+        state.selectedMacro = result.macro;
+        state.selectedButton = result.macro.buttons[0] || null;
+        state.mode = "detail";
+      } else {
+        state.selectedMacro = null;
+        state.selectedButton = null;
+        state.mode = "list";
+      }
       setToast("Macro salva");
     }
     render();
@@ -348,7 +354,13 @@ app.addEventListener("click", async (event) => {
     }
 
     if (action === "back") {
-      state.mode = state.selectedMacro?.id ? "detail" : "list";
+      if (state.mode === "detail") {
+        state.selectedMacro = null;
+        state.selectedButton = null;
+        state.mode = "list";
+      } else {
+        state.mode = state.selectedMacro?.id ? "detail" : "list";
+      }
       if (state.mode === "detail") state.selectedButton = state.selectedMacro.buttons[0] || null;
     }
 

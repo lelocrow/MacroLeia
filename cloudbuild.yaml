@@ -3,12 +3,12 @@ steps:
     args:
       - build
       - -t
-      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/macroleia:$COMMIT_SHA
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/macroleia:$BUILD_ID
       - .
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/macroleia:$COMMIT_SHA
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/macroleia:$BUILD_ID
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
@@ -16,7 +16,7 @@ steps:
       - deploy
       - macroleia
       - --image
-      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/macroleia:$COMMIT_SHA
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/macroleia:$BUILD_ID
       - --region
       - $_REGION
       - --platform
@@ -30,4 +30,4 @@ substitutions:
   _REGION: us-central1
   _REPOSITORY: cloud-run-source-deploy
 images:
-  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/macroleia:$COMMIT_SHA
+  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/macroleia:$BUILD_ID

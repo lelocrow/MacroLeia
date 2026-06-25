@@ -295,17 +295,21 @@ textarea:focus {
 
 .number-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .number-button {
-  min-height: 54px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+  min-height: 72px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--panel-2);
   color: var(--text);
-  font-weight: 800;
+  padding: 12px;
+  text-align: left;
   overflow-wrap: anywhere;
 }
 
@@ -314,16 +318,25 @@ textarea:focus {
   background: rgba(132, 216, 143, 0.14);
 }
 
-.message-view {
-  min-height: 180px;
+.number-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(132, 216, 143, 0.12);
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.number-preview {
+  display: -webkit-box;
+  line-height: 1.35;
+  max-height: 5.4em;
+  overflow: hidden;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  border-radius: 8px;
-  background: #111313;
-  border: 1px solid var(--line);
-  padding: 16px;
-  line-height: 1.55;
-  color: #e8ece6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .button-editor-head,

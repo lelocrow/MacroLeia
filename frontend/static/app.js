@@ -173,13 +173,13 @@ function renderDetail() {
           .map(
             (button) => `
               <button class="number-button ${selected?.number === button.number ? "active" : ""}" data-action="copy" data-number="${button.number}">
-                ${button.number}
+                <span class="number-badge">${button.number}</span>
+                <span class="number-preview">${escapeHtml(button.message || "Sem texto gravado neste botão.")}</span>
               </button>
             `,
           )
           .join("")}
       </div>
-      <div class="message-view">${escapeHtml(selected?.message || "Sem texto gravado neste botao.")}</div>
     </section>
   `;
 }

@@ -246,6 +246,10 @@ textarea:focus {
 }
 
 .macro-name {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
   min-height: 48px;
   overflow-wrap: anywhere;
   border-radius: 8px;
@@ -255,19 +259,25 @@ textarea:focus {
   font-weight: 750;
 }
 
-.copy-tooltip {
-  position: absolute;
-  left: 14px;
-  top: -11px;
-  z-index: 4;
-  border: 1px solid rgba(132, 216, 143, 0.55);
-  border-radius: 8px;
-  background: #102016;
-  color: var(--green);
-  box-shadow: var(--shadow);
-  padding: 5px 9px;
+.macro-kind {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(98, 203, 213, 0.45);
+  border-radius: 7px;
+  background: rgba(98, 203, 213, 0.12);
+  color: var(--accent);
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.macro-kind.multi {
+  border-color: rgba(132, 216, 143, 0.5);
+  background: rgba(132, 216, 143, 0.12);
+  color: var(--green);
 }
 
 .row-actions {

@@ -6,7 +6,6 @@ const state = {
   mode: "loading",
   authMode: "login",
   toast: "",
-  copyTipId: null,
   authFields: {
     username: "",
     email: "",
@@ -27,7 +26,7 @@ poweredBy.alt = "Powered by";
 document.body.appendChild(poweredBy);
 
 const defaultButtons = () =>
-  Array.from({ length: 6 }, (_, index) => ({
+  Array.from({ length: 1 }, (_, index) => ({
     number: index + 1,
     label: String(index + 1),
     message: "",
@@ -139,17 +138,22 @@ function renderHeader(title, actions = "") {
 function renderList() {
   const items = state.macros
     .map(
-      (macro, index) => `
+      (macro, index) => {
+        const kind = getMacroKind(macro);
+        return `
         <article class="macro-row">
-          <button class="macro-name" data-action="open" data-id="${macro.id}">${escapeHtml(macro.name)}</button>
-          ${state.copyTipId === String(macro.id) ? `<span class="copy-tooltip">Copiado</span>` : ""}
+          <button class="macro-name" data-action="open" data-id="${macro.id}">
+            <span class="macro-kind ${kind === "M" ? "multi" : "single"}" aria-label="${kind === "M" ? "Macro com múltiplas opções" : "Macro single"}">${kind}</span>
+            <span>${escapeHtml(macro.name)}</span>
+          </button>
           <div class="row-actions">
             <button class="arrow" title="Subir" data-action="move" data-id="${macro.id}" data-direction="up" ${index === 0 ? "disabled" : ""}>↑</button>
             <button class="arrow" title="Descer" data-action="move" data-id="${macro.id}" data-direction="down" ${index === state.macros.length - 1 ? "disabled" : ""}>↓</button>
             <button class="small" data-action="edit" data-id="${macro.id}">Editar</button>
           </div>
         </article>
-      `,
+      `;
+      },
     )
     .join("");
 
@@ -369,7 +373,7 @@ app.addEventListener("click", async (event) => {
       const singleButton = getSingleFilledButton(listedMacro);
       if (singleButton) {
         await copyText(singleButton.message);
-        showCopyTooltip(id);
+        setToast("Copiado");
         return;
       }
 
@@ -512,22 +516,20 @@ function syncEditorState() {
 }
 
 function getSingleFilledButton(macro) {
-  const filledButtons = (macro?.buttons || []).filter((button) => button.message?.trim());
+  const filledButtons = getFilledButtons(macro);
   return filledButtons.length === 1 ? filledButtons[0] : null;
+}
+
+function getFilledButtons(macro) {
+  return (macro?.buttons || []).filter((button) => button.message?.trim());
+}
+
+function getMacroKind(macro) {
+  return getFilledButtons(macro).length > 1 ? "M" : "S";
 }
 
 async function copyText(message) {
   await navigator.clipboard.writeText(message);
-}
-
-function showCopyTooltip(id) {
-  state.copyTipId = String(id);
-  render();
-  window.clearTimeout(showCopyTooltip.timer);
-  showCopyTooltip.timer = window.setTimeout(() => {
-    state.copyTipId = null;
-    render();
-  }, 1400);
 }
 
 loadSession();

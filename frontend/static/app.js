@@ -445,6 +445,7 @@ function captureFocusedField() {
   const fields = [...app.querySelectorAll(field.tagName.toLowerCase())].filter((item) => item.name === field.name);
   return {
     tag: field.tagName.toLowerCase(),
+    type: field.type || "",
     name: field.name,
     index: fields.indexOf(field),
     value: field.value,
@@ -462,9 +463,19 @@ function restoreFocusedField(focusedField) {
 
   field.value = focusedField.value;
   field.focus({ preventScroll: true });
-  if (typeof field.setSelectionRange === "function") {
+  if (canRestoreSelection(field, focusedField)) {
     field.setSelectionRange(focusedField.selectionStart, focusedField.selectionEnd);
   }
+}
+
+function canRestoreSelection(field, focusedField) {
+  const selectableTypes = ["", "text", "search", "tel", "url", "password"];
+  return (
+    typeof field.setSelectionRange === "function" &&
+    focusedField.selectionStart !== null &&
+    focusedField.selectionEnd !== null &&
+    (focusedField.tag === "textarea" || selectableTypes.includes(focusedField.type))
+  );
 }
 
 function resetAuthFields() {

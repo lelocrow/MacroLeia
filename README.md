@@ -241,6 +241,127 @@ All user and macro operations are exposed under `/api`.
 | `DELETE` | `/api/macros/{macro_id}` | Delete a macro. |
 | `POST` | `/api/macros/{macro_id}/reorder` | Move a macro up or down. |
 
+### API Usage Examples
+
+The API uses an HTTP-only session cookie. When testing with `curl`, use a cookie jar so authenticated requests can reuse the session created by register or login.
+
+Set a base URL:
+
+```bash
+BASE_URL="https://macroleia-753430801062.us-central1.run.app"
+```
+
+Register a user and save the session cookie:
+
+```bash
+curl -i -c cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo_user","email":"demo@example.com","password":"secret123"}' \
+  "$BASE_URL/api/auth/register"
+```
+
+Log in with an existing user:
+
+```bash
+curl -i -c cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo_user","password":"secret123"}' \
+  "$BASE_URL/api/auth/login"
+```
+
+Check the current session:
+
+```bash
+curl -b cookies.txt "$BASE_URL/api/me"
+```
+
+Create a single-message macro:
+
+```bash
+curl -b cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Greeting",
+    "buttons": [
+      { "label": "1", "message": "Hello! How can I help you today?" }
+    ]
+  }' \
+  "$BASE_URL/api/macros"
+```
+
+Create a multi-message macro:
+
+```bash
+curl -b cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Troubleshooting",
+    "buttons": [
+      { "label": "1", "message": "Please restart the application and try again." },
+      { "label": "2", "message": "Please confirm whether the issue also happens in an incognito window." },
+      { "label": "3", "message": "I will escalate this with the details collected so far." }
+    ]
+  }' \
+  "$BASE_URL/api/macros"
+```
+
+List macros:
+
+```bash
+curl -b cookies.txt "$BASE_URL/api/macros"
+```
+
+Get one macro:
+
+```bash
+curl -b cookies.txt "$BASE_URL/api/macros/MACRO_ID"
+```
+
+Update a macro:
+
+```bash
+curl -X PUT -b cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Troubleshooting",
+    "buttons": [
+      { "label": "1", "message": "Please restart the application and try again." },
+      { "label": "2", "message": "Please send a screenshot of the error message." }
+    ]
+  }' \
+  "$BASE_URL/api/macros/MACRO_ID"
+```
+
+Move a macro up or down in the list:
+
+```bash
+curl -X POST -b cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"direction":"up"}' \
+  "$BASE_URL/api/macros/MACRO_ID/reorder"
+```
+
+Delete a macro:
+
+```bash
+curl -X DELETE -b cookies.txt "$BASE_URL/api/macros/MACRO_ID"
+```
+
+Reset a password:
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo_user","email":"demo@example.com","new_password":"newsecret123"}' \
+  "$BASE_URL/api/auth/reset-password"
+```
+
+Log out:
+
+```bash
+curl -X POST -b cookies.txt -c cookies.txt "$BASE_URL/api/auth/logout"
+```
+
 ## Security Notes
 
 - Passwords are stored as salted hashes, not as plain text.

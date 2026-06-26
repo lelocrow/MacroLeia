@@ -128,7 +128,7 @@ function renderHeader(title, actions = "") {
     <header class="topbar">
       <div>
         <p class="eyebrow">${escapeHtml(state.user?.username || "")}</p>
-        <h1>${escapeHtml(title)}</h1>
+        ${title ? `<h1>${escapeHtml(title)}</h1>` : ""}
       </div>
       <div class="top-actions">${actions}<button class="icon-button" data-action="logout" title="Sair">Sair</button></div>
     </header>
@@ -158,7 +158,7 @@ function renderList() {
     .join("");
 
   return `
-    ${renderHeader("Macros", `<button class="primary compact" data-action="new">Nova</button>`)}
+    ${renderHeader("", `<button class="primary compact" data-action="new">Nova</button>`)}
     <section class="list-wrap">
       ${items || `<div class="empty">Nenhuma macro ainda.</div>`}
     </section>

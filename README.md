@@ -35,6 +35,7 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 - Each numbered button copies its stored message to the clipboard.
 - Macro editor starts new macros with one text field and lets users add more as needed.
 - Dark, compact, responsive layout optimized for narrow windows.
+- Home screen keeps the top area minimal by showing the logo and actions without a redundant `Macros` heading.
 - Custom logo support and a small fixed `poweredby` image.
 - FastAPI backend with SQLite for local development.
 - Firestore support for Cloud Run deployments.
@@ -43,7 +44,7 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 ## How It Works
 
 1. The user creates an account or logs in.
-2. The home screen shows only that user's macros.
+2. The home screen shows the logo, user/actions, and only that user's macros without an extra list title.
 3. Each macro row includes a small type badge:
    - `S` means the macro has zero or one filled text and behaves as a single-copy macro.
    - `M` means the macro has multiple filled texts and opens the multi-option detail screen.

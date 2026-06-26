@@ -358,6 +358,12 @@ textarea:focus {
   gap: 10px;
 }
 
+.card-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .button-editor {
   display: grid;
   gap: 12px;
@@ -401,12 +407,14 @@ textarea:focus {
   }
 
   .top-actions,
-  .row-actions {
+  .row-actions,
+  .card-actions {
     justify-content: stretch;
   }
 
   .top-actions > *,
   .row-actions > *,
+  .card-actions > *,
   .form-actions > * {
     flex: 1;
   }

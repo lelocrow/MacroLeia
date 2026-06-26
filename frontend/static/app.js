@@ -211,11 +211,16 @@ function renderForm() {
 }
 
 function renderButtonEditor(button, index) {
+  const buttons = normalizeButtons(state.selectedMacro?.buttons || []);
   return `
     <section class="button-card">
       <div class="button-card-title">
         <strong>${index + 1}</strong>
-        <button class="icon-button" type="button" data-action="remove-button" data-index="${index}" ${index < 1 ? "disabled" : ""}>Remover</button>
+        <div class="card-actions">
+          <button class="arrow" title="Subir texto" type="button" data-action="move-button" data-index="${index}" data-direction="up" ${index === 0 ? "disabled" : ""}>↑</button>
+          <button class="arrow" title="Descer texto" type="button" data-action="move-button" data-index="${index}" data-direction="down" ${index === buttons.length - 1 ? "disabled" : ""}>↓</button>
+          <button class="icon-button" type="button" data-action="remove-button" data-index="${index}" ${index < 1 ? "disabled" : ""}>Remover</button>
+        </div>
       </div>
       <label>Mensagem<textarea name="button-message" rows="4" maxlength="5000">${escapeHtml(button.message || "")}</textarea></label>
     </section>
@@ -417,6 +422,18 @@ app.addEventListener("click", async (event) => {
       syncEditorState();
       const index = Number(target.dataset.index);
       state.selectedMacro.buttons = normalizeButtons(state.selectedMacro.buttons).filter((_, itemIndex) => itemIndex !== index);
+    }
+
+    if (action === "move-button") {
+      syncEditorState();
+      const index = Number(target.dataset.index);
+      const direction = target.dataset.direction;
+      const nextIndex = direction === "up" ? index - 1 : index + 1;
+      const buttons = normalizeButtons(state.selectedMacro.buttons);
+      if (nextIndex >= 0 && nextIndex < buttons.length) {
+        [buttons[index], buttons[nextIndex]] = [buttons[nextIndex], buttons[index]];
+        state.selectedMacro.buttons = normalizeButtons(buttons);
+      }
     }
 
     if (action === "delete") {

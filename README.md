@@ -33,7 +33,7 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 - Single-message macros copy directly from the list and show the same centered `Copiado` toast used by multi-message macros.
 - Multi-message macros open a detail screen with numbered preview buttons.
 - Each numbered button copies its stored message to the clipboard.
-- Macro editor starts new macros with one text field and lets users add more as needed.
+- Macro editor starts new macros with one text field and lets users add, remove, and reorder text cards as needed.
 - Dark, compact, responsive layout optimized for narrow windows.
 - Home screen keeps the top area minimal by showing the logo and actions without a redundant `Macros` heading.
 - Custom logo support and a small fixed `poweredby` image.
@@ -51,8 +51,9 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 4. A macro can contain one or more text messages:
    - If it has one filled message, clicking the macro copies it immediately.
    - If it has multiple filled messages, clicking the macro opens a detail screen.
-5. In the detail screen, each button shows its sequence number plus a preview of the saved text.
-6. Clicking a message button copies the full text to the clipboard and shows a centered `Copiado` toast.
+5. In the macro editor, text cards can be moved up or down before saving, changing the sequence shown in the detail screen.
+6. In the detail screen, each button shows its sequence number plus a preview of the saved text.
+7. Clicking a message button copies the full text to the clipboard and shows a centered `Copiado` toast.
 
 ## Tech Stack
 

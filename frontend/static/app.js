@@ -26,6 +26,7 @@ gatenho.src = "/assets/gatenho.png";
 gatenho.alt = "";
 gatenho.setAttribute("aria-hidden", "true");
 document.body.appendChild(gatenho);
+gatenho.addEventListener("load", syncGatenhoReserve);
 
 const poweredBy = document.createElement("img");
 poweredBy.className = "powered-by";
@@ -34,6 +35,7 @@ poweredBy.alt = "Powered by";
 document.body.appendChild(poweredBy);
 
 let previewResizeObserver = null;
+let gatenhoResizeFrame = null;
 
 const defaultButtons = () =>
   Array.from({ length: 1 }, (_, index) => ({
@@ -97,6 +99,7 @@ function render() {
   renderToast();
   restoreFocusedField(focusedField);
   initResizablePreviews();
+  syncGatenhoReserve();
 }
 
 function renderLoading() {
@@ -591,8 +594,17 @@ function getPreviewResizeKey(macroId, number) {
   return `${macroId}:${number}`;
 }
 
+function syncGatenhoReserve() {
+  window.cancelAnimationFrame(gatenhoResizeFrame);
+  gatenhoResizeFrame = window.requestAnimationFrame(() => {
+    const height = Math.ceil(gatenho.getBoundingClientRect().height);
+    document.documentElement.style.setProperty("--gatenho-reserved-height", `${height}px`);
+  });
+}
+
 async function copyText(message) {
   await navigator.clipboard.writeText(message);
 }
 
+window.addEventListener("resize", syncGatenhoReserve);
 loadSession();

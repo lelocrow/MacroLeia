@@ -36,7 +36,7 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 - Macro editor starts new macros with one text field and lets users add, remove, and reorder text cards as needed.
 - Dark, compact, responsive layout optimized for narrow windows.
 - Home screen keeps the top area minimal by showing the logo and actions without a redundant `Macros` heading.
-- Custom logo support, a fixed scaled bottom-left `gatenho` decorative layer, and a small top-layer `poweredby` image.
+- Custom logo support, a fixed scaled bottom-left `gatenho` decorative layer, reserved footer space, and a small top-layer `poweredby` image.
 - FastAPI backend with SQLite for local development.
 - Firestore support for Cloud Run deployments.
 - Dockerfile and Cloud Build config ready for Google Cloud Run.
@@ -212,7 +212,7 @@ https://macroleia-753430801062.us-central1.run.app/
 Static frontend files are served from `frontend/static`.
 
 - `frontend/static/logo.png`: main responsive logo shown at the top of the app.
-- `frontend/static/gatenho.png`: decorative fixed image anchored to the bottom-left corner, above the page background and behind the app content. It is rendered at about 24% of its original visual size while preserving its proportions.
+- `frontend/static/gatenho.png`: decorative fixed image anchored to the bottom-left corner, above the page background and behind the app content. It is rendered at about 24% of its original visual size while preserving its proportions, and the app reserves a footer strip equal to its rendered height so body content does not occupy that area.
 - `frontend/static/poweredby.png`: small fixed image shown in the bottom-right corner above the app content layers.
 - `frontend/static/styles.css`: dark responsive layout.
 - `frontend/static/app.js`: frontend state, rendering, API calls, and clipboard behavior.

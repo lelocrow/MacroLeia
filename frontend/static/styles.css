@@ -320,6 +320,8 @@ textarea:focus {
   color: var(--text);
   padding: 12px;
   text-align: left;
+  resize: vertical;
+  overflow: hidden;
   overflow-wrap: anywhere;
 }
 
@@ -347,6 +349,17 @@ textarea:focus {
   white-space: pre-wrap;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
+}
+
+.number-button.expanded-preview {
+  overflow: auto;
+}
+
+.number-button.expanded-preview .number-preview {
+  display: block;
+  max-height: none;
+  overflow: visible;
+  -webkit-line-clamp: unset;
 }
 
 .button-editor-head,

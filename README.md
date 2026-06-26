@@ -31,7 +31,7 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 - Macro list with create, edit, rename, delete, reorder actions, and `S`/`M` type badges.
 - Up/down reorder buttons that disable at the first and last positions.
 - Single-message macros copy directly from the list and show the same centered `Copiado` toast used by multi-message macros.
-- Multi-message macros open a detail screen with numbered preview buttons.
+- Multi-message macros open a detail screen with numbered, resizable preview buttons.
 - Each numbered button copies its stored message to the clipboard.
 - Macro editor starts new macros with one text field and lets users add, remove, and reorder text cards as needed.
 - Dark, compact, responsive layout optimized for narrow windows.
@@ -52,8 +52,9 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
    - If it has one filled message, clicking the macro copies it immediately.
    - If it has multiple filled messages, clicking the macro opens a detail screen.
 5. In the macro editor, text cards can be moved up or down before saving, changing the sequence shown in the detail screen.
-6. In the detail screen, each button shows its sequence number plus a preview of the saved text.
-7. Clicking a message button copies the full text to the clipboard and shows a centered `Copiado` toast.
+6. In the detail screen, each button shows its sequence number plus a truncated preview of the saved text.
+7. Preview buttons can be resized vertically to reveal more text while keeping the compact default layout.
+8. Clicking a message button copies the full text to the clipboard and shows a centered `Copiado` toast.
 
 ## Tech Stack
 

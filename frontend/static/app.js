@@ -6,6 +6,7 @@ const state = {
   mode: "loading",
   authMode: "login",
   toast: "",
+  previewHeights: {},
   authFields: {
     username: "",
     email: "",
@@ -24,6 +25,8 @@ poweredBy.className = "powered-by";
 poweredBy.src = "/assets/poweredby.png";
 poweredBy.alt = "Powered by";
 document.body.appendChild(poweredBy);
+
+let previewResizeObserver = null;
 
 const defaultButtons = () =>
   Array.from({ length: 1 }, (_, index) => ({
@@ -86,6 +89,7 @@ function render() {
   app.innerHTML = views[state.mode]();
   renderToast();
   restoreFocusedField(focusedField);
+  initResizablePreviews();
 }
 
 function renderLoading() {
@@ -175,12 +179,18 @@ function renderDetail() {
       <div class="number-grid">
         ${buttons
           .map(
-            (button) => `
-              <button class="number-button ${selected?.number === button.number ? "active" : ""}" data-action="copy" data-number="${button.number}">
+            (button) => {
+              const resizeKey = getPreviewResizeKey(macro.id, button.number);
+              const savedHeight = state.previewHeights[resizeKey];
+              const heightStyle = savedHeight ? ` style="height: ${savedHeight}px"` : "";
+              const expandedClass = savedHeight > 92 ? " expanded-preview" : "";
+              return `
+              <button class="number-button ${selected?.number === button.number ? "active" : ""}${expandedClass}" data-action="copy" data-number="${button.number}" data-resize-key="${resizeKey}"${heightStyle}>
                 <span class="number-badge">${button.number}</span>
                 <span class="number-preview">${escapeHtml(button.message || "Sem texto gravado neste botão.")}</span>
               </button>
-            `,
+            `;
+            },
           )
           .join("")}
       </div>
@@ -471,6 +481,31 @@ function renderToast() {
   toast.textContent = state.toast;
 }
 
+function initResizablePreviews() {
+  if (previewResizeObserver) {
+    previewResizeObserver.disconnect();
+    previewResizeObserver = null;
+  }
+
+  if (state.mode !== "detail" || typeof ResizeObserver !== "function") return;
+
+  previewResizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const card = entry.target;
+      const height = Math.round(card.getBoundingClientRect().height);
+      const resizeKey = card.dataset.resizeKey;
+      if (!resizeKey || !height) continue;
+
+      state.previewHeights[resizeKey] = height;
+      card.classList.toggle("expanded-preview", height > 92);
+    }
+  });
+
+  app.querySelectorAll(".number-button[data-resize-key]").forEach((card) => {
+    previewResizeObserver.observe(card);
+  });
+}
+
 function captureFocusedField() {
   const field = document.activeElement;
   if (!field || !app.contains(field) || !["INPUT", "TEXTAREA"].includes(field.tagName)) return null;
@@ -543,6 +578,10 @@ function getFilledButtons(macro) {
 
 function getMacroKind(macro) {
   return getFilledButtons(macro).length > 1 ? "M" : "S";
+}
+
+function getPreviewResizeKey(macroId, number) {
+  return `${macroId}:${number}`;
 }
 
 async function copyText(message) {

@@ -36,7 +36,7 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 - Macro editor starts new macros with one text field and lets users add, remove, and reorder text cards as needed.
 - Dark, compact, responsive layout optimized for narrow windows.
 - Home screen keeps the top area minimal by showing the logo and actions without a redundant `Macros` heading.
-- Custom logo support and a small fixed `poweredby` image.
+- Custom logo support, a fixed bottom-left `gatenho` background layer, and a small top-layer `poweredby` image.
 - FastAPI backend with SQLite for local development.
 - Firestore support for Cloud Run deployments.
 - Dockerfile and Cloud Build config ready for Google Cloud Run.
@@ -82,6 +82,7 @@ MacroLeia/
     static/
       app.js
       index.html
+      gatenho.png
       logo.png
       poweredby.png
       styles.css
@@ -211,11 +212,12 @@ https://macroleia-753430801062.us-central1.run.app/
 Static frontend files are served from `frontend/static`.
 
 - `frontend/static/logo.png`: main responsive logo shown at the top of the app.
-- `frontend/static/poweredby.png`: small fixed image shown in the bottom-right corner.
+- `frontend/static/gatenho.png`: decorative fixed image anchored to the bottom-left corner, above the page background and behind the app content. It keeps its original image proportions and is not scaled by CSS.
+- `frontend/static/poweredby.png`: small fixed image shown in the bottom-right corner above the app content layers.
 - `frontend/static/styles.css`: dark responsive layout.
 - `frontend/static/app.js`: frontend state, rendering, API calls, and clipboard behavior.
 
-To replace the logo or powered-by image, keep the same filenames and place the PNG files in `frontend/static`.
+To replace the logo, decorative background, or powered-by image, keep the same filenames and place the PNG files in `frontend/static`.
 
 ## API Overview
 

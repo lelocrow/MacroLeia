@@ -20,6 +20,13 @@ toast.className = "toast";
 toast.hidden = true;
 document.body.appendChild(toast);
 
+const gatenho = document.createElement("img");
+gatenho.className = "gatenho-layer";
+gatenho.src = "/assets/gatenho.png";
+gatenho.alt = "";
+gatenho.setAttribute("aria-hidden", "true");
+document.body.appendChild(gatenho);
+
 const poweredBy = document.createElement("img");
 poweredBy.className = "powered-by";
 poweredBy.src = "/assets/poweredby.png";

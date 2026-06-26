@@ -77,8 +77,8 @@ button:disabled {
 
 .site-logo {
   display: block;
-  width: min(180px, 58vw);
-  max-height: 86px;
+  width: min(196px, 62vw);
+  max-height: 94px;
   object-fit: contain;
 }
 

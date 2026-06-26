@@ -209,7 +209,7 @@ https://macroleia-753430801062.us-central1.run.app/
 
 Static frontend files are served from `frontend/static`.
 
-- `frontend/static/logo.png`: main logo shown at the top of the app.
+- `frontend/static/logo.png`: main responsive logo shown at the top of the app.
 - `frontend/static/poweredby.png`: small fixed image shown in the bottom-right corner.
 - `frontend/static/styles.css`: dark responsive layout.
 - `frontend/static/app.js`: frontend state, rendering, API calls, and clipboard behavior.

@@ -57,7 +57,8 @@ class PasswordResetRequest(BaseModel):
 
 class MacroButtonIn(BaseModel):
     label: str = Field(default="", max_length=60)
-    message: str = Field(default="", max_length=5000)
+    message: str = Field(default="", max_length=1_000_000)
+    content_type: str = Field(default="text", pattern=r"^(text|image)$")
 
 
 class MacroIn(BaseModel):
@@ -136,10 +137,17 @@ def init_db() -> None:
                 number INTEGER NOT NULL,
                 label TEXT NOT NULL DEFAULT '',
                 message TEXT NOT NULL DEFAULT '',
+                content_type TEXT NOT NULL DEFAULT 'text',
                 UNIQUE(macro_id, number)
             );
             """
         )
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(macro_buttons)").fetchall()
+        }
+        if "content_type" not in columns:
+            connection.execute("ALTER TABLE macro_buttons ADD COLUMN content_type TEXT NOT NULL DEFAULT 'text'")
 
 
 def get_firestore() -> Any:
@@ -199,7 +207,7 @@ def get_current_user(request: Request) -> dict[str, Any]:
 def macro_to_dict(connection: sqlite3.Connection, macro: sqlite3.Row) -> dict[str, Any]:
     buttons = connection.execute(
         """
-        SELECT number, label, message
+        SELECT number, label, message, content_type
         FROM macro_buttons
         WHERE macro_id = ?
         ORDER BY number
@@ -481,18 +489,19 @@ def find_macro(connection: sqlite3.Connection, macro_id: str, user_id: int) -> s
 def save_buttons(connection: sqlite3.Connection, macro_id: int, buttons: list[MacroButtonIn]) -> None:
     for button in normalize_buttons(buttons):
         connection.execute(
-            "INSERT INTO macro_buttons (macro_id, number, label, message) VALUES (?, ?, ?, ?)",
-            (macro_id, button["number"], button["label"], button["message"]),
+            "INSERT INTO macro_buttons (macro_id, number, label, message, content_type) VALUES (?, ?, ?, ?, ?)",
+            (macro_id, button["number"], button["label"], button["message"], button["content_type"]),
         )
 
 
 def normalize_buttons(buttons: list[MacroButtonIn]) -> list[dict[str, Any]]:
-    normalized = buttons or [MacroButtonIn(label="", message="") for _ in range(6)]
+    normalized = buttons or [MacroButtonIn(label="", message="")]
     return [
         {
             "number": index,
             "label": button.label.strip() or str(index),
             "message": button.message,
+            "content_type": button.content_type,
         }
         for index, button in enumerate(normalized, start=1)
     ]
@@ -503,7 +512,10 @@ def public_firestore_macro(macro: dict[str, Any]) -> dict[str, Any]:
         "id": macro["id"],
         "name": macro["name"],
         "position": macro["position"],
-        "buttons": sorted(macro.get("buttons", []), key=lambda item: item["number"]),
+        "buttons": [
+            {**button, "content_type": button.get("content_type", "text")}
+            for button in sorted(macro.get("buttons", []), key=lambda item: item["number"])
+        ],
     }
 
 

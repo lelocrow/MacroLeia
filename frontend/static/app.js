@@ -17,6 +17,7 @@ const state = {
 
 const previewHeightsStorageKey = "macroleia.previewHeights.v1";
 const editorHeightsStorageKey = "macroleia.editorHeights.v1";
+const maxImageBytes = 600 * 1024;
 const app = document.querySelector("#app");
 const toast = document.createElement("div");
 toast.className = "toast";
@@ -46,6 +47,7 @@ const defaultButtons = () =>
     number: index + 1,
     label: createButtonKey(),
     message: "",
+    content_type: "text",
   }));
 
 async function api(path, options = {}) {
@@ -141,6 +143,28 @@ function renderLogo() {
   return `<img class="site-logo" src="/assets/logo.png" alt="MacroLeia" />`;
 }
 
+function renderImagePreview(value) {
+  if (!value) {
+    return `<span class="number-preview">Sem imagem carregada neste botão.</span>`;
+  }
+
+  return `
+    <span class="image-preview">
+      <img src="${escapeAttr(value)}" alt="Imagem pronta para copiar" />
+      <span>Imagem pronta para copiar</span>
+    </span>
+  `;
+}
+
+function renderImageEditor(button) {
+  return `
+    <div class="image-editor">
+      ${button.message ? `<img src="${escapeAttr(button.message)}" alt="Imagem carregada" />` : `<div class="image-empty">Nenhuma imagem carregada.</div>`}
+      <label>Imagem<input name="button-image" type="file" accept="image/*" data-index="${button.number - 1}" /></label>
+    </div>
+  `;
+}
+
 function renderHeader(title, actions = "") {
   return `
     <div class="logo-strip">${renderLogo()}</div>
@@ -199,10 +223,11 @@ function renderDetail() {
               const savedHeight = state.previewHeights[resizeKey];
               const heightStyle = savedHeight ? ` style="height: ${savedHeight}px"` : "";
               const expandedClass = savedHeight > 92 ? " expanded-preview" : "";
+              const isImage = getButtonContentType(button) === "image";
               return `
               <button class="number-button ${selected?.number === button.number ? "active" : ""}${expandedClass}" data-action="copy" data-number="${button.number}" data-resize-key="${resizeKey}"${heightStyle}>
                 <span class="number-badge">${button.number}</span>
-                <span class="number-preview">${escapeHtml(button.message || "Sem texto gravado neste botão.")}</span>
+                ${isImage ? renderImagePreview(button.message) : `<span class="number-preview">${escapeHtml(button.message || "Sem texto gravado neste botão.")}</span>`}
               </button>
             `;
             },
@@ -221,7 +246,7 @@ function renderForm() {
     <form class="editor" data-action="save-macro" data-id="${macro.id || ""}">
       <label>Nome da macro<input name="name" required maxlength="80" value="${escapeAttr(macro.name)}" /></label>
       <div class="button-editor-head">
-        <h2>Textos dos botoes</h2>
+        <h2>Conteudos dos botoes</h2>
         <button class="ghost compact" type="button" data-action="add-button">Adicionar botao</button>
       </div>
       <div class="button-editor">
@@ -238,20 +263,23 @@ function renderForm() {
 function renderButtonEditor(button, index) {
   const buttons = normalizeButtons(state.selectedMacro?.buttons || []);
   const buttonKey = getButtonKey(button);
+  const contentType = getButtonContentType(button);
   const resizeKey = getEditorResizeKey(state.selectedMacro?.id || "draft", buttonKey);
   const savedHeight = state.editorHeights[resizeKey];
   const heightStyle = savedHeight ? ` style="height: ${savedHeight}px"` : "";
   return `
-    <section class="button-card" data-button-key="${escapeAttr(buttonKey)}">
+    <section class="button-card" data-button-key="${escapeAttr(buttonKey)}" data-content-type="${escapeAttr(contentType)}">
       <div class="button-card-title">
         <strong>${index + 1}</strong>
         <div class="card-actions">
-          <button class="arrow" title="Subir texto" type="button" data-action="move-button" data-index="${index}" data-direction="up" ${index === 0 ? "disabled" : ""}>↑</button>
-          <button class="arrow" title="Descer texto" type="button" data-action="move-button" data-index="${index}" data-direction="down" ${index === buttons.length - 1 ? "disabled" : ""}>↓</button>
+          <button class="small ${contentType === "text" ? "active" : ""}" type="button" data-action="set-button-type" data-index="${index}" data-content-type="text">Texto</button>
+          <button class="small ${contentType === "image" ? "active" : ""}" type="button" data-action="set-button-type" data-index="${index}" data-content-type="image">Imagem</button>
+          <button class="arrow" title="Subir card" type="button" data-action="move-button" data-index="${index}" data-direction="up" ${index === 0 ? "disabled" : ""}>↑</button>
+          <button class="arrow" title="Descer card" type="button" data-action="move-button" data-index="${index}" data-direction="down" ${index === buttons.length - 1 ? "disabled" : ""}>↓</button>
           <button class="icon-button" type="button" data-action="remove-button" data-index="${index}" ${index < 1 ? "disabled" : ""}>Remover</button>
         </div>
       </div>
-      <label>Mensagem<textarea name="button-message" rows="4" maxlength="5000" data-resize-key="${escapeAttr(resizeKey)}"${heightStyle}>${escapeHtml(button.message || "")}</textarea></label>
+      ${contentType === "image" ? renderImageEditor(button) : `<label>Mensagem<textarea name="button-message" rows="4" maxlength="5000" data-resize-key="${escapeAttr(resizeKey)}"${heightStyle}>${escapeHtml(button.message || "")}</textarea></label>`}
     </section>
   `;
 }
@@ -262,6 +290,7 @@ function normalizeButtons(buttons) {
     number: index + 1,
     label: getButtonKey(button),
     message: button.message || "",
+    content_type: getButtonContentType(button),
   }));
 }
 
@@ -317,12 +346,13 @@ app.addEventListener("submit", async (event) => {
     }
 
     if (action === "save-macro") {
-      const messages = [...form.querySelectorAll('[name="button-message"]')];
+      syncEditorState();
       const payload = {
         name: formData.get("name"),
-        buttons: messages.map((message) => ({
-          label: message.closest(".button-card")?.dataset.buttonKey || createButtonKey(),
-          message: message.value,
+        buttons: normalizeButtons(state.selectedMacro.buttons).map((button) => ({
+          label: getButtonKey(button),
+          message: button.message,
+          content_type: getButtonContentType(button),
         })),
       };
       const macroId = form.dataset.id;
@@ -406,7 +436,11 @@ app.addEventListener("click", async (event) => {
       const listedMacro = state.macros.find((item) => String(item.id) === String(id));
       const singleButton = getSingleFilledButton(listedMacro);
       if (singleButton) {
-        await copyText(singleButton.message);
+        if (getButtonContentType(singleButton) === "image") {
+          await copyImage(singleButton.message);
+        } else {
+          await copyText(singleButton.message);
+        }
         setToast("Copiado");
         return;
       }
@@ -436,7 +470,11 @@ app.addEventListener("click", async (event) => {
       state.selectedButton = state.selectedMacro.buttons.find((button) => button.number === number);
       const message = state.selectedButton?.message || "";
       if (message) {
-        await copyText(message);
+        if (getButtonContentType(state.selectedButton) === "image") {
+          await copyImage(message);
+        } else {
+          await copyText(message);
+        }
         setToast("Copiado");
       }
     }
@@ -444,7 +482,7 @@ app.addEventListener("click", async (event) => {
     if (action === "add-button") {
       syncEditorState();
       const cards = state.selectedMacro.buttons.length;
-      state.selectedMacro.buttons.push({ number: cards + 1, label: createButtonKey(), message: "" });
+      state.selectedMacro.buttons.push({ number: cards + 1, label: createButtonKey(), message: "", content_type: "text" });
     }
 
     if (action === "remove-button") {
@@ -465,6 +503,18 @@ app.addEventListener("click", async (event) => {
       }
     }
 
+    if (action === "set-button-type") {
+      syncEditorState();
+      const index = Number(target.dataset.index);
+      const contentType = target.dataset.contentType;
+      const buttons = normalizeButtons(state.selectedMacro.buttons);
+      if (buttons[index] && ["text", "image"].includes(contentType)) {
+        buttons[index].content_type = contentType;
+        buttons[index].message = "";
+        state.selectedMacro.buttons = normalizeButtons(buttons);
+      }
+    }
+
     if (action === "delete") {
       if (window.confirm("Excluir esta macro?")) {
         await api(`/api/macros/${id}`, { method: "DELETE" });
@@ -476,6 +526,38 @@ app.addEventListener("click", async (event) => {
       }
     }
 
+    render();
+  } catch (error) {
+    setToast(error.message);
+  }
+});
+
+app.addEventListener("change", async (event) => {
+  const field = event.target;
+  if (field.name !== "button-image" || state.mode !== "form") return;
+
+  const file = field.files?.[0];
+  if (!file || !file.type.startsWith("image/")) {
+    setToast("Selecione uma imagem");
+    return;
+  }
+
+  if (file.size > maxImageBytes) {
+    setToast("Imagem muito grande. Use ate 600 KB");
+    field.value = "";
+    return;
+  }
+
+  try {
+    syncEditorState();
+    const index = Number(field.dataset.index);
+    const buttons = normalizeButtons(state.selectedMacro.buttons);
+    if (!buttons[index]) return;
+
+    buttons[index].content_type = "image";
+    buttons[index].message = await readFileAsDataUrl(file);
+    state.selectedMacro.buttons = normalizeButtons(buttons);
+    setToast("Imagem carregada");
     render();
   } catch (error) {
     setToast(error.message);
@@ -603,13 +685,19 @@ function syncEditorState() {
   const editor = app.querySelector(".editor");
   if (!editor || !state.selectedMacro) return;
   const formData = new FormData(editor);
-  const messages = [...editor.querySelectorAll('[name="button-message"]')];
+  const previousButtons = normalizeButtons(state.selectedMacro.buttons);
   state.selectedMacro.name = formData.get("name") || state.selectedMacro.name;
-  state.selectedMacro.buttons = messages.map((message, index) => ({
-    number: index + 1,
-    label: message.closest(".button-card")?.dataset.buttonKey || createButtonKey(),
-    message: message.value,
-  }));
+  state.selectedMacro.buttons = [...editor.querySelectorAll(".button-card")].map((card, index) => {
+    const contentType = card.dataset.contentType || "text";
+    const label = card.dataset.buttonKey || createButtonKey();
+    const previousButton = previousButtons.find((button) => getButtonKey(button) === label);
+    return {
+      number: index + 1,
+      label,
+      message: contentType === "image" ? previousButton?.message || "" : card.querySelector('[name="button-message"]')?.value || "",
+      content_type: contentType,
+    };
+  });
 }
 
 function getSingleFilledButton(macro) {
@@ -635,6 +723,10 @@ function getEditorResizeKey(macroId, buttonKey) {
 
 function getButtonKey(button) {
   return button?.label || createButtonKey();
+}
+
+function getButtonContentType(button) {
+  return button?.content_type === "image" ? "image" : "text";
 }
 
 function createButtonKey() {
@@ -683,6 +775,59 @@ function syncGatenhoReserve() {
 
 async function copyText(message) {
   await navigator.clipboard.writeText(message);
+}
+
+async function copyImage(dataUrl) {
+  if (typeof ClipboardItem !== "function") {
+    throw new Error("Copia de imagem nao suportada neste navegador");
+  }
+
+  const response = await fetch(dataUrl);
+  const originalBlob = await response.blob();
+  const blob = originalBlob.type === "image/png" ? originalBlob : await convertImageBlobToPng(originalBlob);
+  await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+}
+
+async function convertImageBlobToPng(blob) {
+  const image = await loadImageFromBlob(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  canvas.getContext("2d").drawImage(image, 0, 0);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((pngBlob) => {
+      if (pngBlob) {
+        resolve(pngBlob);
+      } else {
+        reject(new Error("Nao foi possivel preparar a imagem"));
+      }
+    }, "image/png");
+  });
+}
+
+function loadImageFromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.addEventListener("load", () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    });
+    image.addEventListener("error", () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Nao foi possivel carregar a imagem"));
+    });
+    image.src = url;
+  });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")));
+    reader.addEventListener("error", () => reject(new Error("Nao foi possivel carregar a imagem")));
+    reader.readAsDataURL(file);
+  });
 }
 
 window.addEventListener("resize", syncGatenhoReserve);

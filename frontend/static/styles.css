@@ -214,6 +214,12 @@ textarea:focus {
   background: var(--panel-2);
 }
 
+.small.active {
+  border-color: rgba(132, 216, 143, 0.65);
+  background: rgba(132, 216, 143, 0.14);
+  color: var(--green);
+}
+
 .link-button {
   min-height: 34px;
   border-color: transparent;
@@ -385,6 +391,21 @@ textarea:focus {
   -webkit-line-clamp: unset;
 }
 
+.image-preview {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.image-preview img {
+  width: min(100%, 220px);
+  max-height: 140px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  object-fit: contain;
+  background: #0f1111;
+}
+
 .button-editor-head,
 .button-card-title,
 .form-actions {
@@ -412,6 +433,30 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #141717;
+}
+
+.image-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.image-editor img,
+.image-empty {
+  width: 100%;
+  min-height: 130px;
+  max-height: 260px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  object-fit: contain;
+  background: #101212;
+}
+
+.image-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  padding: 16px;
+  text-align: center;
 }
 
 .toast {

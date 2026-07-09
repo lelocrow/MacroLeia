@@ -115,6 +115,26 @@ def test_register_create_update_reorder_and_delete_macro(client):
     assert [item["name"] for item in client.get("/api/macros").json()["macros"]] == ["Atendimento"]
 
 
+def test_macro_supports_image_buttons(client):
+    register(client)
+    image_data = "data:image/png;base64,iVBORw0KGgo="
+
+    created = client.post(
+        "/api/macros",
+        json={
+            "name": "Imagem",
+            "buttons": [
+                {"label": "ready-image", "message": image_data, "content_type": "image"},
+            ],
+        },
+    )
+
+    assert created.status_code == 201
+    button = created.json()["macro"]["buttons"][0]
+    assert button["content_type"] == "image"
+    assert button["message"] == image_data
+
+
 def test_users_cannot_access_each_others_macros(client):
     register(client, "ana", "ana@example.com", "segredo1")
     created = client.post(

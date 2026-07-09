@@ -59,20 +59,53 @@ async function api(path, options = {}) {
 
   if (response.status === 204) return null;
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.detail || "Algo saiu do esperado");
+  if (!response.ok) throw new Error(formatApiError(payload));
   return payload;
 }
 
+function formatApiError(payload) {
+  return formatErrorDetail(payload?.detail) || payload?.message || "Algo saiu do esperado";
+}
+
+function formatErrorDetail(detail) {
+  if (!detail) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(formatValidationItem).filter(Boolean).join("; ");
+  }
+  if (typeof detail === "object") {
+    return detail.message || detail.detail || JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
+function formatValidationItem(item) {
+  if (typeof item === "string") return item;
+  if (!item || typeof item !== "object") return "";
+  const message = item.msg || item.message || "Valor invalido";
+  const location = Array.isArray(item.loc)
+    ? item.loc.filter((part) => !["body", "query", "path"].includes(String(part))).join(".")
+    : "";
+  return location ? `${location}: ${message}` : message;
+}
+
 function setToast(message) {
-  state.toast = message;
+  state.toast = formatToastMessage(message);
   renderToast();
-  if (message) {
+  if (state.toast) {
     window.clearTimeout(setToast.timer);
     setToast.timer = window.setTimeout(() => {
       state.toast = "";
       renderToast();
     }, 2200);
   }
+}
+
+function formatToastMessage(message) {
+  if (message instanceof Error) return message.message;
+  if (typeof message === "string") return message;
+  if (!message) return "";
+  return formatErrorDetail(message) || String(message);
 }
 
 async function loadSession() {
@@ -374,7 +407,7 @@ app.addEventListener("submit", async (event) => {
     }
     render();
   } catch (error) {
-    setToast(error.message);
+    setToast(error);
   }
 });
 
@@ -528,7 +561,7 @@ app.addEventListener("click", async (event) => {
 
     render();
   } catch (error) {
-    setToast(error.message);
+    setToast(error);
   }
 });
 
@@ -541,7 +574,7 @@ app.addEventListener("change", async (event) => {
     await setEditorCardImage(Number(field.dataset.index), file);
   } catch (error) {
     field.value = "";
-    setToast(error.message);
+    setToast(error);
   }
 });
 
@@ -560,7 +593,7 @@ app.addEventListener("paste", async (event) => {
     const index = [...app.querySelectorAll(".button-card")].indexOf(card);
     await setEditorCardImage(index, file);
   } catch (error) {
-    setToast(error.message);
+    setToast(error);
   }
 });
 

@@ -38,6 +38,7 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 - Images can be added with the file picker or by pasting an image directly into a text card while editing.
 - Image uploads refresh the card preview safely without programmatically rewriting the file input value, matching browser security rules for filename inputs.
 - Image cards are stored outside the macro database: local files in development and Google Cloud Storage objects in Cloud Run.
+- API validation errors are converted into readable toast messages instead of raw JavaScript object text.
 - Macro editor starts new macros with one text card and lets users add, remove, and reorder cards as needed.
 - Dark, compact, responsive layout optimized for narrow windows.
 - Home screen keeps the top area minimal by showing the logo and actions without a redundant `Macros` heading.
@@ -462,6 +463,7 @@ curl -X POST -b cookies.txt -c cookies.txt "$BASE_URL/api/auth/logout"
 - For Cloud Run, use Firestore for structured data and Cloud Storage for image objects because containers can scale to zero and should not rely on local container storage.
 - Clipboard writes require a browser context that allows the Clipboard API, such as HTTPS or localhost.
 - Browser file inputs can only be cleared programmatically; keep upload state in macro card data instead of trying to restore a selected filename after re-rendering.
+- Keep frontend API error handling tolerant of FastAPI validation payloads, which may arrive as strings, objects, or arrays.
 
 ## License
 

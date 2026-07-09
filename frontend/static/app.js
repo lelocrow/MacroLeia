@@ -7,6 +7,7 @@ const state = {
   authMode: "login",
   toast: "",
   previewHeights: {},
+  editorHeights: {},
   authFields: {
     username: "",
     email: "",
@@ -14,6 +15,8 @@ const state = {
   },
 };
 
+const previewHeightsStorageKey = "macroleia.previewHeights.v1";
+const editorHeightsStorageKey = "macroleia.editorHeights.v1";
 const app = document.querySelector("#app");
 const toast = document.createElement("div");
 toast.className = "toast";
@@ -35,12 +38,13 @@ poweredBy.alt = "Powered by";
 document.body.appendChild(poweredBy);
 
 let previewResizeObserver = null;
+let editorResizeObserver = null;
 let gatenhoResizeFrame = null;
 
 const defaultButtons = () =>
   Array.from({ length: 1 }, (_, index) => ({
     number: index + 1,
-    label: String(index + 1),
+    label: createButtonKey(),
     message: "",
   }));
 
@@ -99,6 +103,7 @@ function render() {
   renderToast();
   restoreFocusedField(focusedField);
   initResizablePreviews();
+  initResizableEditors();
   syncGatenhoReserve();
 }
 
@@ -190,7 +195,7 @@ function renderDetail() {
         ${buttons
           .map(
             (button) => {
-              const resizeKey = getPreviewResizeKey(macro.id, button.number);
+              const resizeKey = getPreviewResizeKey(macro.id, button);
               const savedHeight = state.previewHeights[resizeKey];
               const heightStyle = savedHeight ? ` style="height: ${savedHeight}px"` : "";
               const expandedClass = savedHeight > 92 ? " expanded-preview" : "";
@@ -232,8 +237,12 @@ function renderForm() {
 
 function renderButtonEditor(button, index) {
   const buttons = normalizeButtons(state.selectedMacro?.buttons || []);
+  const buttonKey = getButtonKey(button);
+  const resizeKey = getEditorResizeKey(state.selectedMacro?.id || "draft", buttonKey);
+  const savedHeight = state.editorHeights[resizeKey];
+  const heightStyle = savedHeight ? ` style="height: ${savedHeight}px"` : "";
   return `
-    <section class="button-card">
+    <section class="button-card" data-button-key="${escapeAttr(buttonKey)}">
       <div class="button-card-title">
         <strong>${index + 1}</strong>
         <div class="card-actions">
@@ -242,7 +251,7 @@ function renderButtonEditor(button, index) {
           <button class="icon-button" type="button" data-action="remove-button" data-index="${index}" ${index < 1 ? "disabled" : ""}>Remover</button>
         </div>
       </div>
-      <label>Mensagem<textarea name="button-message" rows="4" maxlength="5000">${escapeHtml(button.message || "")}</textarea></label>
+      <label>Mensagem<textarea name="button-message" rows="4" maxlength="5000" data-resize-key="${escapeAttr(resizeKey)}"${heightStyle}>${escapeHtml(button.message || "")}</textarea></label>
     </section>
   `;
 }
@@ -251,7 +260,7 @@ function normalizeButtons(buttons) {
   const normalized = buttons?.length ? buttons : defaultButtons();
   return normalized.map((button, index) => ({
     number: index + 1,
-    label: button.label || String(index + 1),
+    label: getButtonKey(button),
     message: button.message || "",
   }));
 }
@@ -311,8 +320,8 @@ app.addEventListener("submit", async (event) => {
       const messages = [...form.querySelectorAll('[name="button-message"]')];
       const payload = {
         name: formData.get("name"),
-        buttons: messages.map((message, index) => ({
-          label: String(index + 1),
+        buttons: messages.map((message) => ({
+          label: message.closest(".button-card")?.dataset.buttonKey || createButtonKey(),
           message: message.value,
         })),
       };
@@ -435,7 +444,7 @@ app.addEventListener("click", async (event) => {
     if (action === "add-button") {
       syncEditorState();
       const cards = state.selectedMacro.buttons.length;
-      state.selectedMacro.buttons.push({ number: cards + 1, label: String(cards + 1), message: "" });
+      state.selectedMacro.buttons.push({ number: cards + 1, label: createButtonKey(), message: "" });
     }
 
     if (action === "remove-button") {
@@ -507,12 +516,38 @@ function initResizablePreviews() {
       if (!resizeKey || !height) continue;
 
       state.previewHeights[resizeKey] = height;
+      savePreviewHeights();
       card.classList.toggle("expanded-preview", height > 92);
     }
   });
 
   app.querySelectorAll(".number-button[data-resize-key]").forEach((card) => {
     previewResizeObserver.observe(card);
+  });
+}
+
+function initResizableEditors() {
+  if (editorResizeObserver) {
+    editorResizeObserver.disconnect();
+    editorResizeObserver = null;
+  }
+
+  if (state.mode !== "form" || typeof ResizeObserver !== "function") return;
+
+  editorResizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const field = entry.target;
+      const height = Math.round(field.getBoundingClientRect().height);
+      const resizeKey = field.dataset.resizeKey;
+      if (!resizeKey || !height) continue;
+
+      state.editorHeights[resizeKey] = height;
+      saveEditorHeights();
+    }
+  });
+
+  app.querySelectorAll('textarea[name="button-message"][data-resize-key]').forEach((field) => {
+    editorResizeObserver.observe(field);
   });
 }
 
@@ -572,7 +607,7 @@ function syncEditorState() {
   state.selectedMacro.name = formData.get("name") || state.selectedMacro.name;
   state.selectedMacro.buttons = messages.map((message, index) => ({
     number: index + 1,
-    label: String(index + 1),
+    label: message.closest(".button-card")?.dataset.buttonKey || createButtonKey(),
     message: message.value,
   }));
 }
@@ -590,8 +625,52 @@ function getMacroKind(macro) {
   return getFilledButtons(macro).length > 1 ? "M" : "S";
 }
 
-function getPreviewResizeKey(macroId, number) {
-  return `${macroId}:${number}`;
+function getPreviewResizeKey(macroId, button) {
+  return `${macroId}:${getButtonKey(button)}`;
+}
+
+function getEditorResizeKey(macroId, buttonKey) {
+  return `${macroId}:${buttonKey}`;
+}
+
+function getButtonKey(button) {
+  return button?.label || createButtonKey();
+}
+
+function createButtonKey() {
+  return `btn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function loadPreviewHeights() {
+  try {
+    state.previewHeights = JSON.parse(localStorage.getItem(previewHeightsStorageKey) || "{}");
+  } catch {
+    state.previewHeights = {};
+  }
+}
+
+function loadEditorHeights() {
+  try {
+    state.editorHeights = JSON.parse(localStorage.getItem(editorHeightsStorageKey) || "{}");
+  } catch {
+    state.editorHeights = {};
+  }
+}
+
+function savePreviewHeights() {
+  try {
+    localStorage.setItem(previewHeightsStorageKey, JSON.stringify(state.previewHeights));
+  } catch {
+    return;
+  }
+}
+
+function saveEditorHeights() {
+  try {
+    localStorage.setItem(editorHeightsStorageKey, JSON.stringify(state.editorHeights));
+  } catch {
+    return;
+  }
 }
 
 function syncGatenhoReserve() {
@@ -607,4 +686,6 @@ async function copyText(message) {
 }
 
 window.addEventListener("resize", syncGatenhoReserve);
+loadPreviewHeights();
+loadEditorHeights();
 loadSession();

@@ -36,6 +36,7 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 - Each numbered button copies its stored text or image to the clipboard.
 - Macro editor supports mutually exclusive text or image cards, preventing a single card from mixing both content types.
 - Images can be added with the file picker or by pasting an image directly into a text card while editing.
+- Image uploads refresh the card preview safely without programmatically rewriting the file input value, matching browser security rules for filename inputs.
 - Image cards are stored outside the macro database: local files in development and Google Cloud Storage objects in Cloud Run.
 - Macro editor starts new macros with one text card and lets users add, remove, and reorder cards as needed.
 - Dark, compact, responsive layout optimized for narrow windows.
@@ -460,6 +461,7 @@ curl -X POST -b cookies.txt -c cookies.txt "$BASE_URL/api/auth/logout"
 - Run the API tests before publishing code changes.
 - For Cloud Run, use Firestore for structured data and Cloud Storage for image objects because containers can scale to zero and should not rely on local container storage.
 - Clipboard writes require a browser context that allows the Clipboard API, such as HTTPS or localhost.
+- Browser file inputs can only be cleared programmatically; keep upload state in macro card data instead of trying to restore a selected filename after re-rendering.
 
 ## License
 

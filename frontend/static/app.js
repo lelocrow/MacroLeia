@@ -636,6 +636,7 @@ function initResizableEditors() {
 function captureFocusedField() {
   const field = document.activeElement;
   if (!field || !app.contains(field) || !["INPUT", "TEXTAREA"].includes(field.tagName)) return null;
+  if (field.type === "file") return null;
 
   const fields = [...app.querySelectorAll(field.tagName.toLowerCase())].filter((item) => item.name === field.name);
   return {
@@ -656,7 +657,9 @@ function restoreFocusedField(focusedField) {
   const field = candidates[focusedField.index];
   if (!field) return;
 
-  field.value = focusedField.value;
+  if (field.type !== "file") {
+    field.value = focusedField.value;
+  }
   field.focus({ preventScroll: true });
   if (canRestoreSelection(field, focusedField)) {
     field.setSelectionRange(focusedField.selectionStart, focusedField.selectionEnd);

@@ -17,7 +17,7 @@ const state = {
 
 const previewHeightsStorageKey = "macroleia.previewHeights.v1";
 const editorHeightsStorageKey = "macroleia.editorHeights.v1";
-const maxImageBytes = 600 * 1024;
+const maxImageBytes = 5 * 1024 * 1024;
 const app = document.querySelector("#app");
 const toast = document.createElement("div");
 toast.className = "toast";
@@ -715,7 +715,7 @@ async function setEditorCardImage(index, file) {
   }
 
   if (file.size > maxImageBytes) {
-    throw new Error("Imagem muito grande. Use ate 600 KB");
+    throw new Error("Imagem muito grande. Use ate 5 MB");
   }
 
   syncEditorState();
@@ -802,7 +802,12 @@ async function copyImage(dataUrl) {
     throw new Error("Copia de imagem nao suportada neste navegador");
   }
 
-  const response = await fetch(dataUrl);
+  const response = dataUrl.startsWith("data:")
+    ? await fetch(dataUrl)
+    : await fetch(dataUrl, { credentials: "include" });
+  if (!response.ok) {
+    throw new Error("Nao foi possivel carregar a imagem");
+  }
   const originalBlob = await response.blob();
   const blob = originalBlob.type === "image/png" ? originalBlob : await convertImageBlobToPng(originalBlob);
   await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);

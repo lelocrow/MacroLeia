@@ -2,7 +2,7 @@
 
 MacroLeia is a small web app for saving, organizing, and copying personal text macros. It was designed for narrow browser windows so it can stay side by side with another app while troubleshooting, supporting customers, or repeating structured text workflows.
 
-The app is protected by login, keeps each user's macros isolated, and can run locally with SQLite or in Google Cloud Run with Firestore.
+The app is protected by login, keeps each user's macros isolated, and can run locally with SQLite or in Google Cloud Run with Firestore plus Cloud Storage for image content.
 
 ## Table of Contents
 
@@ -36,12 +36,13 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 - Each numbered button copies its stored text or image to the clipboard.
 - Macro editor supports mutually exclusive text or image cards, preventing a single card from mixing both content types.
 - Images can be added with the file picker or by pasting an image directly into a text card while editing.
+- Image cards are stored outside the macro database: local files in development and Google Cloud Storage objects in Cloud Run.
 - Macro editor starts new macros with one text card and lets users add, remove, and reorder cards as needed.
 - Dark, compact, responsive layout optimized for narrow windows.
 - Home screen keeps the top area minimal by showing the logo and actions without a redundant `Macros` heading.
 - Custom logo support, a fixed scaled bottom-left `gatenho` decorative layer, a protected footer strip outside the app scroll area, and a small top-layer `poweredby` image.
 - FastAPI backend with SQLite for local development.
-- Firestore support for Cloud Run deployments.
+- Firestore and Cloud Storage support for Cloud Run deployments.
 - Dockerfile and Cloud Build config ready for Google Cloud Run.
 
 ## How It Works
@@ -61,15 +62,16 @@ The app is protected by login, keeps each user's macros isolated, and can run lo
 9. Preview buttons can be resized vertically to reveal more content while keeping the compact default layout.
 10. Custom preview and editor text-box heights are stored in `localStorage` and keyed by each card's stable `label`, so reordering cards does not swap their saved sizes.
 11. Clicking a detail button copies the full text or image to the clipboard and shows a centered `Copiado` toast.
+12. Image uploads keep a size limit, but image bytes are stored outside Firestore to avoid database document-size pressure.
 
 ## Tech Stack
 
 - **Backend:** Python 3.12, FastAPI, Uvicorn, Pydantic.
-- **Local storage:** SQLite.
-- **Cloud storage:** Google Cloud Firestore.
+- **Local data:** SQLite plus local image files under `data/images`.
+- **Cloud data:** Google Cloud Firestore for users/macros and Google Cloud Storage for image blobs.
 - **Frontend:** Static HTML, CSS, and vanilla JavaScript.
 - **Deployment:** Docker, Google Cloud Build, Google Cloud Run.
-- **Tests:** Pytest with FastAPI TestClient.
+- **Tests:** Pytest with HTTPX ASGI transport.
 
 ## Project Structure
 
@@ -93,6 +95,7 @@ MacroLeia/
       poweredby.png
       styles.css
   data/
+    images/
     .gitkeep
   .dockerignore
   .gitignore
@@ -107,7 +110,7 @@ MacroLeia/
 - Git.
 - Docker, if running the container locally.
 - Google Cloud CLI, only when deploying to Cloud Run.
-- A Google Cloud project with Cloud Build, Artifact Registry, Cloud Run, and Firestore enabled for production deployment.
+- A Google Cloud project with Cloud Build, Artifact Registry, Cloud Run, Firestore, and Cloud Storage enabled for production deployment.
 
 ## Local Setup
 
@@ -131,9 +134,10 @@ By default, local data is stored in:
 
 ```text
 data/macroleia.db
+data/images/
 ```
 
-The SQLite database file is ignored by Git.
+The SQLite database file and local image files are ignored by Git.
 
 ## Running Tests
 
@@ -185,6 +189,7 @@ Current Cloud Build substitutions:
 substitutions:
   _REGION: us-central1
   _REPOSITORY: cloud-run-source-deploy
+  _IMAGE_BUCKET: gen-lang-client-0046402285-macroleia-images
 ```
 
 The Cloud Run deployment is configured with:
@@ -192,6 +197,15 @@ The Cloud Run deployment is configured with:
 - `--min-instances 0` so the service can scale to zero when idle.
 - `--allow-unauthenticated` so the web app is reachable publicly while application data remains behind login.
 - `MACROLEIA_STORAGE=firestore` so data persists outside the container.
+- `MACROLEIA_IMAGE_BUCKET=$_IMAGE_BUCKET` so image cards are stored in Cloud Storage instead of Firestore documents.
+- `MACROLEIA_MAX_IMAGE_BYTES=5242880` so uploads are limited to 5 MB.
+
+Before deploying the first image-enabled revision, create the bucket and grant the Cloud Run runtime service account permission to manage objects:
+
+```powershell
+gcloud storage buckets create gs://gen-lang-client-0046402285-macroleia-images --location=us-central1 --uniform-bucket-level-access
+gcloud storage buckets add-iam-policy-binding gs://gen-lang-client-0046402285-macroleia-images --member=serviceAccount:753430801062-compute@developer.gserviceaccount.com --role=roles/storage.objectAdmin
+```
 
 Deploy command:
 
@@ -212,6 +226,9 @@ https://macroleia-753430801062.us-central1.run.app/
 | `PORT` | `8080` in Docker | Port used by Uvicorn inside the container. |
 | `MACROLEIA_DB` | `data/macroleia.db` locally, `/app/data/macroleia.db` in Docker | SQLite database path. |
 | `MACROLEIA_STORAGE` | `sqlite` | Storage backend. Use `sqlite` locally or `firestore` on Cloud Run. |
+| `MACROLEIA_IMAGE_DIR` | `data/images` | Local filesystem directory used for image objects when `MACROLEIA_STORAGE=sqlite`. |
+| `MACROLEIA_IMAGE_BUCKET` | Empty | Google Cloud Storage bucket used for image objects when `MACROLEIA_STORAGE=firestore`. |
+| `MACROLEIA_MAX_IMAGE_BYTES` | `5242880` | Maximum accepted image size in bytes. Default is 5 MB. |
 
 ## Static Assets
 
@@ -234,7 +251,9 @@ In macro button payloads, `number` is generated by the backend from the current 
 Each button has a `content_type`:
 
 - `text`: `message` stores plain text.
-- `image`: `message` stores a data URL such as `data:image/png;base64,...`. The web UI accepts image files up to 600 KB, either selected from disk or pasted from the clipboard, to keep Firestore documents safely below their size limit.
+- `image`: create/update requests may send `message` as a data URL such as `data:image/png;base64,...`. The backend stores the image bytes as an object and saves only a lightweight reference in the macro database. API responses return an authenticated `/api/images/...` URL for image cards.
+
+The web UI accepts image files up to 5 MB, either selected from disk or pasted from the clipboard. The backend enforces the same default limit through `MACROLEIA_MAX_IMAGE_BYTES`.
 
 ### Authentication
 
@@ -256,6 +275,7 @@ Each button has a `content_type`:
 | `PUT` | `/api/macros/{macro_id}` | Update a macro. |
 | `DELETE` | `/api/macros/{macro_id}` | Delete a macro. |
 | `POST` | `/api/macros/{macro_id}/reorder` | Move a macro up or down. |
+| `GET` | `/api/images/{object_name}` | Return an authenticated image object for the logged-in owner. |
 
 ### API Usage Examples
 
@@ -339,6 +359,32 @@ curl -b cookies.txt \
   "$BASE_URL/api/macros"
 ```
 
+The response stores the image behind an authenticated URL instead of echoing the full base64 payload:
+
+```json
+{
+  "macro": {
+    "id": "MACRO_ID",
+    "name": "Image reply",
+    "position": 1,
+    "buttons": [
+      {
+        "number": 1,
+        "label": "ready-image",
+        "content_type": "image",
+        "message": "/api/images/users/demo_user/macros/MACRO_ID/OBJECT.png"
+      }
+    ]
+  }
+}
+```
+
+Download an image card using the same session cookie:
+
+```bash
+curl -b cookies.txt "$BASE_URL/api/images/users/demo_user/macros/MACRO_ID/OBJECT.png" --output macro-image.png
+```
+
 List macros:
 
 ```bash
@@ -403,6 +449,7 @@ curl -X POST -b cookies.txt -c cookies.txt "$BASE_URL/api/auth/logout"
 - Users can only access their own macros through authenticated API routes.
 - Password reset currently validates username and email, then accepts a new password directly.
 - Email confirmation and email-based reset links are intentionally not implemented yet.
+- Image routes validate the session cookie and only serve objects under the logged-in user's image prefix.
 - The app is publicly reachable on Cloud Run, but application data remains behind login.
 
 ## Development Notes
@@ -411,7 +458,7 @@ curl -X POST -b cookies.txt -c cookies.txt "$BASE_URL/api/auth/logout"
 - After every code change, review this README and update it if behavior, setup, deployment, assets, tests, or API details changed.
 - Do not commit local database files from `data/`.
 - Run the API tests before publishing code changes.
-- For Cloud Run, use Firestore instead of SQLite because containers can scale to zero and should not rely on local container storage.
+- For Cloud Run, use Firestore for structured data and Cloud Storage for image objects because containers can scale to zero and should not rely on local container storage.
 - Clipboard writes require a browser context that allows the Clipboard API, such as HTTPS or localhost.
 
 ## License

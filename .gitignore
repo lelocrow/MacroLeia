@@ -8,4 +8,5 @@ venv/
 .ruff_cache/
 data/*.db
 data/*.db-*
+data/images/
 !.gitkeep

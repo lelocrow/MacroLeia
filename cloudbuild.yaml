@@ -25,9 +25,10 @@ steps:
       - --min-instances
       - "0"
       - --set-env-vars
-      - MACROLEIA_STORAGE=firestore
+      - MACROLEIA_STORAGE=firestore,MACROLEIA_IMAGE_BUCKET=$_IMAGE_BUCKET,MACROLEIA_MAX_IMAGE_BYTES=5242880
 substitutions:
   _REGION: us-central1
   _REPOSITORY: cloud-run-source-deploy
+  _IMAGE_BUCKET: gen-lang-client-0046402285-macroleia-images
 images:
   - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/macroleia:$BUILD_ID

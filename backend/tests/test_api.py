@@ -9,6 +9,7 @@ from backend.app import main
 @pytest.fixture()
 def client(tmp_path):
     main.DB_PATH = tmp_path / "test.db"
+    main.IMAGE_DIR = tmp_path / "images"
     main.init_db()
     transport = httpx.ASGITransport(app=main.app)
 
@@ -117,7 +118,7 @@ def test_register_create_update_reorder_and_delete_macro(client):
 
 def test_macro_supports_image_buttons(client):
     register(client)
-    image_data = "data:image/png;base64,iVBORw0KGgo="
+    image_data = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
 
     created = client.post(
         "/api/macros",
@@ -132,7 +133,13 @@ def test_macro_supports_image_buttons(client):
     assert created.status_code == 201
     button = created.json()["macro"]["buttons"][0]
     assert button["content_type"] == "image"
-    assert button["message"] == image_data
+    assert button["message"].startswith("/api/images/users/")
+
+    image = client.get(button["message"])
+
+    assert image.status_code == 200
+    assert image.headers["content-type"] == "image/png"
+    assert image.content.startswith(b"\x89PNG")
 
 
 def test_users_cannot_access_each_others_macros(client):

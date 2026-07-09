@@ -1,3 +1,5 @@
+import base64
+import binascii
 import hashlib
 import hmac
 import os
@@ -6,6 +8,7 @@ import sqlite3
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import quote, unquote
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +22,11 @@ DB_PATH = Path(os.getenv("MACROLEIA_DB", BASE_DIR / "data" / "macroleia.db"))
 STATIC_DIR = BASE_DIR / "frontend" / "static"
 SESSION_COOKIE = "macroleia_session"
 STORAGE_BACKEND = os.getenv("MACROLEIA_STORAGE", "sqlite").lower()
+IMAGE_BUCKET = os.getenv("MACROLEIA_IMAGE_BUCKET", "")
+IMAGE_DIR = Path(os.getenv("MACROLEIA_IMAGE_DIR", BASE_DIR / "data" / "images"))
+MAX_IMAGE_BYTES = int(os.getenv("MACROLEIA_MAX_IMAGE_BYTES", str(5 * 1024 * 1024)))
 firestore_client: Any | None = None
+storage_client: Any | None = None
 
 
 @asynccontextmanager
@@ -57,7 +64,7 @@ class PasswordResetRequest(BaseModel):
 
 class MacroButtonIn(BaseModel):
     label: str = Field(default="", max_length=60)
-    message: str = Field(default="", max_length=1_000_000)
+    message: str = Field(default="", max_length=8_000_000)
     content_type: str = Field(default="text", pattern=r"^(text|image)$")
 
 
@@ -159,6 +166,18 @@ def get_firestore() -> Any:
     return firestore_client
 
 
+def get_storage_bucket() -> Any:
+    global storage_client
+    if not IMAGE_BUCKET:
+        raise HTTPException(status_code=500, detail="Bucket de imagens nao configurado")
+
+    if storage_client is None:
+        from google.cloud import storage
+
+        storage_client = storage.Client()
+    return storage_client.bucket(IMAGE_BUCKET)
+
+
 def using_firestore() -> bool:
     return STORAGE_BACKEND == "firestore"
 
@@ -218,7 +237,7 @@ def macro_to_dict(connection: sqlite3.Connection, macro: sqlite3.Row) -> dict[st
         "id": macro["id"],
         "name": macro["name"],
         "position": macro["position"],
-        "buttons": [dict(button) for button in buttons],
+        "buttons": [public_button(dict(button)) for button in buttons],
     }
 
 
@@ -369,7 +388,7 @@ def create_macro(payload: MacroIn, user: dict[str, Any] = Depends(get_current_us
             "user_id": user["id"],
             "name": payload.name,
             "position": max([item["position"] for item in macros], default=0) + 1,
-            "buttons": normalize_buttons(payload.buttons),
+            "buttons": normalize_buttons(payload.buttons, user["id"], macro_id),
         }
         client.collection("macros").document(macro_id).set(macro)
         return {"macro": public_firestore_macro(macro)}
@@ -384,7 +403,7 @@ def create_macro(payload: MacroIn, user: dict[str, Any] = Depends(get_current_us
             (user["id"], payload.name, next_position),
         )
         macro_id = cursor.lastrowid
-        save_buttons(connection, macro_id, payload.buttons)
+        save_buttons(connection, macro_id, payload.buttons, str(user["id"]))
         macro = connection.execute("SELECT id, name, position FROM macros WHERE id = ?", (macro_id,)).fetchone()
         return {"macro": macro_to_dict(connection, macro)}
 
@@ -403,19 +422,31 @@ def get_macro(macro_id: str, user: dict[str, Any] = Depends(get_current_user)) -
 def update_macro(macro_id: str, payload: MacroIn, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     if using_firestore():
         macro = find_firestore_macro(str(macro_id), user["id"])
-        macro.update({"name": payload.name, "buttons": normalize_buttons(payload.buttons)})
+        previous_refs = image_refs_from_buttons(macro.get("buttons", []))
+        macro.update({"name": payload.name, "buttons": normalize_buttons(payload.buttons, user["id"], str(macro_id))})
         get_firestore().collection("macros").document(str(macro_id)).set(macro)
+        cleanup_unused_images(previous_refs, image_refs_from_buttons(macro.get("buttons", [])))
         return {"macro": public_firestore_macro(macro)}
 
     with db() as connection:
         find_macro(connection, macro_id, user["id"])
+        previous_buttons = connection.execute(
+            "SELECT message, content_type FROM macro_buttons WHERE macro_id = ?",
+            (macro_id,),
+        ).fetchall()
+        previous_refs = image_refs_from_buttons([dict(button) for button in previous_buttons])
         connection.execute(
             "UPDATE macros SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (payload.name, macro_id),
         )
         connection.execute("DELETE FROM macro_buttons WHERE macro_id = ?", (macro_id,))
-        save_buttons(connection, macro_id, payload.buttons)
+        save_buttons(connection, macro_id, payload.buttons, str(user["id"]))
         macro = connection.execute("SELECT id, name, position FROM macros WHERE id = ?", (macro_id,)).fetchone()
+        next_buttons = connection.execute(
+            "SELECT message, content_type FROM macro_buttons WHERE macro_id = ?",
+            (macro_id,),
+        ).fetchall()
+        cleanup_unused_images(previous_refs, image_refs_from_buttons([dict(button) for button in next_buttons]))
         return {"macro": macro_to_dict(connection, macro)}
 
 
@@ -425,6 +456,7 @@ def delete_macro(macro_id: str, user: dict[str, Any] = Depends(get_current_user)
         macro = find_firestore_macro(str(macro_id), user["id"])
         client = get_firestore()
         client.collection("macros").document(str(macro_id)).delete()
+        cleanup_unused_images(image_refs_from_buttons(macro.get("buttons", [])), set())
         for item in list_firestore_macros(user["id"]):
             if item["position"] > macro["position"]:
                 client.collection("macros").document(str(item["id"])).update({"position": item["position"] - 1})
@@ -432,11 +464,16 @@ def delete_macro(macro_id: str, user: dict[str, Any] = Depends(get_current_user)
 
     with db() as connection:
         macro = find_macro(connection, macro_id, user["id"])
+        previous_buttons = connection.execute(
+            "SELECT message, content_type FROM macro_buttons WHERE macro_id = ?",
+            (macro_id,),
+        ).fetchall()
         connection.execute("DELETE FROM macros WHERE id = ?", (macro_id,))
         connection.execute(
             "UPDATE macros SET position = position - 1 WHERE user_id = ? AND position > ?",
             (user["id"], macro["position"]),
         )
+        cleanup_unused_images(image_refs_from_buttons([dict(button) for button in previous_buttons]), set())
 
 
 @app.post("/api/macros/{macro_id}/reorder")
@@ -486,25 +523,156 @@ def find_macro(connection: sqlite3.Connection, macro_id: str, user_id: int) -> s
     return macro
 
 
-def save_buttons(connection: sqlite3.Connection, macro_id: int, buttons: list[MacroButtonIn]) -> None:
-    for button in normalize_buttons(buttons):
+def save_buttons(connection: sqlite3.Connection, macro_id: int, buttons: list[MacroButtonIn], user_id: str) -> None:
+    for button in normalize_buttons(buttons, user_id, str(macro_id)):
         connection.execute(
             "INSERT INTO macro_buttons (macro_id, number, label, message, content_type) VALUES (?, ?, ?, ?, ?)",
             (macro_id, button["number"], button["label"], button["message"], button["content_type"]),
         )
 
 
-def normalize_buttons(buttons: list[MacroButtonIn]) -> list[dict[str, Any]]:
+def normalize_buttons(buttons: list[MacroButtonIn], user_id: str, macro_id: str) -> list[dict[str, Any]]:
     normalized = buttons or [MacroButtonIn(label="", message="")]
-    return [
-        {
+    items = []
+    for index, button in enumerate(normalized, start=1):
+        content_type = button.content_type
+        message = button.message
+        if content_type == "image":
+            message = store_image_message(message, user_id, macro_id)
+        else:
+            message = message.strip()
+
+        items.append({
             "number": index,
             "label": button.label.strip() or str(index),
-            "message": button.message,
-            "content_type": button.content_type,
-        }
-        for index, button in enumerate(normalized, start=1)
-    ]
+            "message": message,
+            "content_type": content_type,
+        })
+    return items
+
+
+def public_button(button: dict[str, Any]) -> dict[str, Any]:
+    public = {**button, "content_type": button.get("content_type", "text")}
+    if public["content_type"] == "image":
+        public["message"] = public_image_message(str(public.get("message", "")))
+    return public
+
+
+def public_image_message(message: str) -> str:
+    if not message or message.startswith("data:image/"):
+        return message
+    if message.startswith("gcs:") or message.startswith("local:"):
+        return f"/api/images/{quote(message.split(':', 1)[1], safe='/')}"
+    return message
+
+
+def store_image_message(message: str, user_id: str, macro_id: str) -> str:
+    message = message.strip()
+    if not message:
+        return ""
+    if message.startswith("data:image/"):
+        image_bytes, media_type, extension = parse_image_data_url(message)
+        object_name = f"users/{user_id}/macros/{macro_id}/{secrets.token_urlsafe(18)}.{extension}"
+        if using_firestore():
+            blob = get_storage_bucket().blob(object_name)
+            blob.upload_from_string(image_bytes, content_type=media_type)
+            return f"gcs:{object_name}"
+
+        local_path = safe_local_image_path(object_name)
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(image_bytes)
+        return f"local:{object_name}"
+    if message.startswith("/api/images/"):
+        object_name = unquote(message.removeprefix("/api/images/"))
+        validate_image_object_name(object_name, user_id)
+        return f"{'gcs' if using_firestore() else 'local'}:{object_name}"
+    if message.startswith(("gcs:", "local:")):
+        object_name = message.split(":", 1)[1]
+        validate_image_object_name(object_name, user_id)
+        return message
+    raise HTTPException(status_code=400, detail="Imagem invalida")
+
+
+def parse_image_data_url(data_url: str) -> tuple[bytes, str, str]:
+    header, _, encoded = data_url.partition(",")
+    if not encoded or ";base64" not in header:
+        raise HTTPException(status_code=400, detail="Imagem invalida")
+
+    media_type = header.removeprefix("data:").split(";", 1)[0].lower()
+    extensions = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/webp": "webp",
+        "image/gif": "gif",
+        "image/bmp": "bmp",
+    }
+    extension = extensions.get(media_type)
+    if not extension:
+        raise HTTPException(status_code=400, detail="Tipo de imagem nao suportado")
+
+    try:
+        image_bytes = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Imagem invalida") from exc
+
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        limit_mb = MAX_IMAGE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"Imagem muito grande. Use ate {limit_mb:g} MB")
+    return image_bytes, media_type, extension
+
+
+def validate_image_object_name(object_name: str, user_id: str) -> None:
+    if not object_name.startswith(f"users/{user_id}/") or ".." in Path(object_name).parts:
+        raise HTTPException(status_code=403, detail="Imagem nao encontrada")
+
+
+def safe_local_image_path(object_name: str) -> Path:
+    path = (IMAGE_DIR / object_name).resolve()
+    root = IMAGE_DIR.resolve()
+    if root != path and root not in path.parents:
+        raise HTTPException(status_code=400, detail="Imagem invalida")
+    return path
+
+
+def image_refs_from_buttons(buttons: list[dict[str, Any]]) -> set[str]:
+    refs = set()
+    for button in buttons:
+        if button.get("content_type", "text") != "image":
+            continue
+        message = str(button.get("message", ""))
+        if message.startswith(("gcs:", "local:")):
+            refs.add(message)
+    return refs
+
+
+def cleanup_unused_images(previous_refs: set[str], next_refs: set[str]) -> None:
+    for ref in previous_refs - next_refs:
+        try:
+            delete_image_ref(ref)
+        except Exception:
+            continue
+
+
+def delete_image_ref(ref: str) -> None:
+    storage_kind, _, object_name = ref.partition(":")
+    if storage_kind == "gcs" and IMAGE_BUCKET:
+        get_storage_bucket().blob(object_name).delete()
+    if storage_kind == "local":
+        path = safe_local_image_path(object_name)
+        if path.exists():
+            path.unlink()
+
+
+def image_media_type(object_name: str) -> str:
+    extension = Path(object_name).suffix.lower()
+    return {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".bmp": "image/bmp",
+    }.get(extension, "application/octet-stream")
 
 
 def public_firestore_macro(macro: dict[str, Any]) -> dict[str, Any]:
@@ -513,7 +681,7 @@ def public_firestore_macro(macro: dict[str, Any]) -> dict[str, Any]:
         "name": macro["name"],
         "position": macro["position"],
         "buttons": [
-            {**button, "content_type": button.get("content_type", "text")}
+            public_button(button)
             for button in sorted(macro.get("buttons", []), key=lambda item: item["number"])
         ],
     }
@@ -534,6 +702,30 @@ def find_firestore_macro(macro_id: str, user_id: str) -> dict[str, Any]:
     if data["user_id"] != user_id:
         raise HTTPException(status_code=404, detail="Macro nao encontrada")
     return data
+
+
+@app.get("/api/images/{object_name:path}")
+def get_image(object_name: str, user: dict[str, Any] = Depends(get_current_user)) -> Response:
+    object_name = unquote(object_name)
+    validate_image_object_name(object_name, str(user["id"]))
+    if using_firestore():
+        blob = get_storage_bucket().blob(object_name)
+        if not blob.exists():
+            raise HTTPException(status_code=404, detail="Imagem nao encontrada")
+        return Response(
+            content=blob.download_as_bytes(),
+            media_type=blob.content_type or image_media_type(object_name),
+            headers={"Cache-Control": "private, max-age=3600"},
+        )
+
+    path = safe_local_image_path(object_name)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Imagem nao encontrada")
+    return Response(
+        content=path.read_bytes(),
+        media_type=image_media_type(object_name),
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")

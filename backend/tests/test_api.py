@@ -142,6 +142,26 @@ def test_macro_supports_image_buttons(client):
     assert image.content.startswith(b"\x89PNG")
 
 
+def test_macro_accepts_up_to_100_buttons(client):
+    register(client)
+    buttons = [{"label": f"step-{index}", "message": f"Texto {index}"} for index in range(1, 101)]
+
+    created = client.post("/api/macros", json={"name": "Checklist longo", "buttons": buttons})
+
+    assert created.status_code == 201
+    assert len(created.json()["macro"]["buttons"]) == 100
+
+    too_many = client.post(
+        "/api/macros",
+        json={
+            "name": "Checklist grande demais",
+            "buttons": buttons + [{"label": "step-101", "message": "Texto 101"}],
+        },
+    )
+
+    assert too_many.status_code == 422
+
+
 def test_users_cannot_access_each_others_macros(client):
     register(client, "ana", "ana@example.com", "segredo1")
     created = client.post(

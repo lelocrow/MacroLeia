@@ -70,7 +70,7 @@ class MacroButtonIn(BaseModel):
 
 class MacroIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    buttons: list[MacroButtonIn] = Field(default_factory=list, max_length=30)
+    buttons: list[MacroButtonIn] = Field(default_factory=list, max_length=100)
 
 
 class ReorderRequest(BaseModel):

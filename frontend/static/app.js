@@ -537,28 +537,28 @@ app.addEventListener("change", async (event) => {
   if (field.name !== "button-image" || state.mode !== "form") return;
 
   const file = field.files?.[0];
-  if (!file || !file.type.startsWith("image/")) {
-    setToast("Selecione uma imagem");
-    return;
-  }
-
-  if (file.size > maxImageBytes) {
-    setToast("Imagem muito grande. Use ate 600 KB");
-    field.value = "";
-    return;
-  }
-
   try {
-    syncEditorState();
-    const index = Number(field.dataset.index);
-    const buttons = normalizeButtons(state.selectedMacro.buttons);
-    if (!buttons[index]) return;
+    await setEditorCardImage(Number(field.dataset.index), file);
+  } catch (error) {
+    field.value = "";
+    setToast(error.message);
+  }
+});
 
-    buttons[index].content_type = "image";
-    buttons[index].message = await readFileAsDataUrl(file);
-    state.selectedMacro.buttons = normalizeButtons(buttons);
-    setToast("Imagem carregada");
-    render();
+app.addEventListener("paste", async (event) => {
+  if (state.mode !== "form") return;
+
+  const field = event.target;
+  if (!field.matches?.('[name="button-message"]')) return;
+
+  const file = [...(event.clipboardData?.files || [])].find((item) => item.type.startsWith("image/"));
+  if (!file) return;
+
+  event.preventDefault();
+  try {
+    const card = field.closest(".button-card");
+    const index = [...app.querySelectorAll(".button-card")].indexOf(card);
+    await setEditorCardImage(index, file);
   } catch (error) {
     setToast(error.message);
   }
@@ -707,6 +707,26 @@ function getSingleFilledButton(macro) {
 
 function getFilledButtons(macro) {
   return (macro?.buttons || []).filter((button) => button.message?.trim());
+}
+
+async function setEditorCardImage(index, file) {
+  if (!file || !file.type.startsWith("image/")) {
+    throw new Error("Selecione uma imagem");
+  }
+
+  if (file.size > maxImageBytes) {
+    throw new Error("Imagem muito grande. Use ate 600 KB");
+  }
+
+  syncEditorState();
+  const buttons = normalizeButtons(state.selectedMacro.buttons);
+  if (!buttons[index]) return;
+
+  buttons[index].content_type = "image";
+  buttons[index].message = await readFileAsDataUrl(file);
+  state.selectedMacro.buttons = normalizeButtons(buttons);
+  setToast("Imagem carregada");
+  render();
 }
 
 function getMacroKind(macro) {
